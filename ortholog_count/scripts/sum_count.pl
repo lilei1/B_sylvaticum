@@ -16,12 +16,12 @@ open(SNPID,  "$file") or die "Could not open $file";
 foreach my $row (<SNPID>){
         chomp $row;
         my @rtemp= split(/\t/,$row);
-        my $key = $rtemp[0]."_".$rtemp[1]."_".$rtemp[2]."_".$rtemp[3]."_".$rtemp[4];
-        push @{$gidhash{$key}}, $rtemp[5];
+        my $key = $rtemp[0]."_".$rtemp[1]."_".$rtemp[2]."_".$rtemp[3]."_".$rtemp[4]."_".$rtemp[5];
+        push @{$gidhash{$key}}, $rtemp[6];
 }
 close (SNPID);
 
-print "Bdistachyon\tBstacei\tBsylvaticum\tOsativaKitaake\tSbicolor\tcount\n";
+print "Bdistachyon\tBstacei\tBsylvaticum\tOsativaKitaake\tSbicolor\tPhallii\tcount\n";
 my $count=0;
 foreach my $key (keys %gidhash){
  			my @arrary = @{$gidhash{$key}};
@@ -29,6 +29,6 @@ foreach my $key (keys %gidhash){
  				$count = $count + $ele;
  			}
  			my @tt = split(/\_/,$key);
- 			print "$tt[0]\t$tt[1]\t$tt[2]\t$tt[3]\t$tt[4]\t$count\n";
+ 			print "$tt[0]\t$tt[1]\t$tt[2]\t$tt[3]\t$tt[4]\t$tt[5]\t$count\n";
  			$count=0;
 }
