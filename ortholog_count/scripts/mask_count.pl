@@ -27,6 +27,6 @@ foreach my $row (<SNPID>){
                    }
          #print "$ele\t"
         }
-        print "$rtemp[5]\n";
+        print "$rtemp[6]\n";
 }
 close (SNPID);
