@@ -21,7 +21,7 @@ foreach my $row (<SNPID>){
 }
 close (SNPID);
 
-print "Bdistachyon\tBstacei\tBsylvaticum\tOsativaKitaake\tSbicolor\tPhallii\tcount\n";
+print "Sbicolor\tOsativaKitaake\tPhalliiHAL\tBsylvaticum\tBstacei\tBdistachyon\tcount\n";
 my $count=0;
 foreach my $key (keys %gidhash){
  			my @arrary = @{$gidhash{$key}};
