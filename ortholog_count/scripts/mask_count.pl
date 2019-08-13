@@ -16,7 +16,7 @@ open(SNPID,  "$file") or die "Could not open $file";
 foreach my $row (<SNPID>){
         chomp $row;
         my @rtemp= split(/\t/,$row);
-        my @tmp = @rtemp[0..4];
+        my @tmp = @rtemp[0..5];
         #print "$rtemp[5]\n";
         foreach my $ele (@tmp){
                    if ($ele !=0){
