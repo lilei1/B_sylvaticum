@@ -12,7 +12,7 @@ my %gidhash;
 
 open(SNPID,  "$file") or die "Could not open $file";
 my $header = <SNPID>;
-print "Bdistachyon\tBstacei\tBsylvaticum\tOsativaKitaake\tSbicolor\tPhallii\n";
+print "Sbicolor\tOsativaKitaake\tPhalliiHAL\tBsylvaticum\tBstacei\tBdistachyon\tcount\n";
 foreach my $row (<SNPID>){
         chomp $row;
         my @rtemp= split(/\t/,$row);
