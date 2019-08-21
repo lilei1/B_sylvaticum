@@ -35,16 +35,11 @@ foreach my $row (<SNPID>){
         }
         for my $mnz (@species) {
             my $zs; 
-            $zs = grep { $_ eq $mnz } @arr;
-            #for (@arr) {
-                #my @z = grep { $_ eq $mnz } split;
-                #$zs += @z;
-            #}
-            #print "@arr\t";
+            $zs = grep { $_ eq $mnz } @arr; #count the occrence of an element in an array
             print "$mnz:$zs\t";
-            $zs = 0;
+            $zs = 0; #clear the counting
         }
         print "\n";
-        @arr = '';
+        @arr = ''; #clear the array
 }
 close (SNPID);
