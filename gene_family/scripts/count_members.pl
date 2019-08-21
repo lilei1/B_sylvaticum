@@ -6,8 +6,18 @@ use warnings;
 use Data::Dumper;
 my $file = $ARGV[0];
 
-my %gidhash;
+#initiate a hash:
+#my %shash = (
+#    "Sbicolor"  => "annual",
+#    "Osativa" => "annual",
+#    "Bdistachyon"  => "annual",
+#    "Bsylvaticum" => "perennial"
+#    "Bstacei" => "perennial"
+#   "Phallii" => "perennial"
+#);
+#initiate a array:
 
+my @species = qw(Sbicolor Osativa Bdistachyon Bsylvaticum Bstacei Phallii);
 
 open(SNPID,  "$file") or die "Could not open $file";
 #my $header = <SNPID>;
@@ -15,20 +25,26 @@ open(SNPID,  "$file") or die "Could not open $file";
 foreach my $row (<SNPID>){
         chomp $row;
         my @rtemp = split(/\t/,$row);
-        my @tmp = split(/\t/,$row);
-        
-        push @{$gidhash{$key}}, $rtemp[6];
+        my $id = $rtemp[0];
+        print "$id\t";
+        my @tmp = split(/\,/,$rtemp[1]);
+        my @arr;
+        foreach my $ele (@tmp){
+                my @tt = split(/:/,$ele);
+                push @arr, $tt[0];
+        }
+        for my $mnz (@species) {
+            my $zs; 
+            $zs = grep { $_ eq $mnz } @arr;
+            #for (@arr) {
+                #my @z = grep { $_ eq $mnz } split;
+                #$zs += @z;
+            #}
+            #print "@arr\t";
+            print "$mnz:$zs\t";
+            $zs = 0;
+        }
+        print "\n";
+        @arr = '';
 }
 close (SNPID);
-
-print "Sbicolor\tOsativaKitaake\tPhalliiHAL\tBsylvaticum\tBstacei\tBdistachyon\tcount\n";
-my $count=0;
-foreach my $key (keys %gidhash){
- 			my @arrary = @{$gidhash{$key}};
- 			foreach my $ele (@arrary){
- 				$count = $count + $ele;
- 			}
- 			my @tt = split(/\_/,$key);
- 			print "$tt[0]\t$tt[1]\t$tt[2]\t$tt[3]\t$tt[4]\t$tt[5]\t$count\n";
- 			$count=0;
-}
