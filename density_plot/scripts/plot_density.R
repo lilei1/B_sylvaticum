@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-#   Script to write a fancy plot for the smoothied CDS density file
+#   Script to make a fancy plot for the smoothied CDS density file
 # Written by Li Lei, July 30th, 2019 in Walnut Creek, CA.
 
 #load GGplot2
@@ -31,7 +31,7 @@ ggplot(rec_rate) +
     strip.text.y=element_text(size=10, colour="black", angle=0),
     axis.ticks.y=element_blank()) +
   labs(y="", x="Physical Position (Mb)")
-
+  #ggsave() 
 dev.off()
 }
 

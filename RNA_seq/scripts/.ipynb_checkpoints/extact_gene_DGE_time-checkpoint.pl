@@ -5,6 +5,7 @@
 use strict;
 use warnings;
 #use Data::Dumper;
+#usage: perl extract_gene_DGE_time.pl Abiostress_timepoint_DGE_sum.txt >Gene_DGE_time.txt
 my $file = $ARGV[0];
 
 
