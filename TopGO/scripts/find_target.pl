@@ -37,5 +37,3 @@ foreach my $row (<ID>){
 close (ID);
 close (OUT1);
 close (OUT2);
-
-Brasy1G010900.1
