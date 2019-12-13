@@ -171,10 +171,16 @@ table(bwnet$colors)
 #558 8923 3587 2721 2579 2342  857  834  359  350  291  250  201  174  138  136  118   88   46 
 # Convert labels to colors for plotting
 bwModuleColors = labels2colors(bwLabels)
+#try to merge:
 
-
+merge = mergeCloseModules(datExpr0, bwLabels, cutHeight = 0.25, verbose = 3)
 #?matchLabels
-
+moduleLabels = merge$colors
+cbind(moduleLabels, bwnet$colors)
+table(merge$colors)
+# 0    1    2    3    4    5    6    7    8    9   10   11   12   13   14   15   16   17   18 
+#558 8923 3587 2721 2579 2342  857  834  359  350  291  250  201  174  138  136  118   88   46 
+#It seems like there is no module I can merge!!!!
 # open a graphics window
 sizeGrWindow(6,6)
 pdf(file = "/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/Dendro_abiotic_VST.pdf",width = 25,height = 25)
@@ -207,29 +213,36 @@ dev.off()
 MEs <- moduleEigengenes(datExpr0, bwModuleColors)$eigengenes
 head(MEs)
 kMEs <- signedKME(datExpr0, MEs)
-
+head(kMEs)
 # rank the genes for each module on kMEs
 rankGenes <- function(x){
   kMErank <- rank(-kMEs[ ,x])
   genes <- rownames(kMEs)
   genes <- genes[order(kMErank)]
-  genes[1:50]#top 50 hub genes!!!
+  #genes[1:50]#top 50 hub genes!!!
 }
 
 topGenes <- lapply(1:ncol(kMEs), rankGenes)
-
+nrow(topGenes)
 # Get the top results in a data.frame
 topGenes <- do.call(cbind, topGenes)
 colnames(topGenes) <- substr(colnames(kMEs), start=4, stop=30)
+nrow(topGenes)
+head(topGenes)
 hubgenes <- data.frame(topGenes)
-write.csv(hubgenes, file = "/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/abiotic_50hubgenes_list.csv")
+write.csv(hubgenes, file = "/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/abiotic_allhubgenes_list.csv")
+
+####intromodular connectivity:
+ADJ1=abs(cor(datExpr0,use="p"))^6
+Alldegrees1=intramodularConnectivity(ADJ1, bwModuleColors)
+head(Alldegrees1)
 
 ######### Get the top edges:
 top.n.edges = 3000
 min.edge = 2
 adj_mat<-adjacency(datExpr0,power=8)
 head(adj_mat)
-message("number of genes present = ", nrow(adj_mat))
+message("number of genes present = ", nrow(adj_mat))#number of genes present = 24552
 if(!is.na(top.n.edges) & nrow(adj_mat) >= 100){
   adjacency.threshold = sort(as.numeric(adj_mat), decreasing=T)[(top.n.edges*2)+nrow(adj_mat)]
 }
@@ -244,9 +257,170 @@ rs<-rowSums(adj_mat)
 if(verbose) cat("removing unconnected nodes\n")
 adj_mat<-adj_mat[rs>min.edge,rs>min.edge]
 message("number of genes present = ", nrow(adj_mat))
-head(adj_mat)
-network <- graph.adjacency(adj_mat)
+test <- data.frame(adj_mat)
+#row.names(test)[modProbes,])
+#yellow
+probes = colnames(datExpr0)
+yellow_modules = c("yellow")
+yellow_inModule = is.finite(match(bwModuleColors, yellow_modules))
+yellow_modProbes = probes[yellow_inModule]
+#test <- data.frame(adj_mat)
+yellow_list <- subset(adj_mat, rownames(adj_mat) %in% yellow_modProbes)
+#cyan:
+probes = colnames(datExpr0)
+cyan_modules = c("cyan")
+cyan_inModule = is.finite(match(bwModuleColors, cyan_modules))
+cyan_modProbes = probes[cyan_inModule]
+cyan_list <- subset(adj_mat, rownames(adj_mat) %in% cyan_modProbes)#0
+#blue
+probes = colnames(datExpr0)
+blue_modules = c("blue")
+blue_inModule = is.finite(match(bwModuleColors, blue_modules))
+blue_modProbes = probes[blue_inModule]
+blue_list <- subset(adj_mat, rownames(adj_mat) %in% blue_modProbes)
+#green
+probes = colnames(datExpr0)
+green_modules = c("green")
+green_inModule = is.finite(match(bwModuleColors, green_modules))
+green_modProbes = probes[green_inModule]
+green_list <- subset(adj_mat, rownames(adj_mat) %in% green_modProbes)
+#greenyellow
+probes = colnames(datExpr0)
+greeny_modules = c("greenyellow")
+greeny_inModule = is.finite(match(bwModuleColors, greeny_modules))
+greeny_modProbes = probes[greeny_inModule]
+greeny_list <- subset(adj_mat, rownames(adj_mat) %in% greeny_modProbes)#0
+
+#brown
+probes = colnames(datExpr0)
+brown_modules = c("brown")
+brown_inModule = is.finite(match(bwModuleColors, brown_modules))
+brown_modProbes = probes[brown_inModule]
+brown_list <- subset(adj_mat, rownames(adj_mat) %in% brown_modProbes)
+
+#black
+probes = colnames(datExpr0)
+black_modules = c("black")
+black_inModule = is.finite(match(bwModuleColors, black_modules))
+black_modProbes = probes[black_inModule]
+black_list <- subset(adj_mat, rownames(adj_mat) %in% black_modProbes)#0
+#grey
+probes = colnames(datExpr0)
+grey_modules = c("grey")
+grey_inModule = is.finite(match(bwModuleColors, grey_modules))
+grey_modProbes = probes[grey_inModule]
+grey_list <- subset(adj_mat, rownames(adj_mat) %in% grey_modProbes)#0
+#grey
+probes = colnames(datExpr0)
+grey60_modules = c("grey60")
+grey60_inModule = is.finite(match(bwModuleColors, grey60_modules))
+grey60_modProbes = probes[grey60_inModule]
+grey60_list <- subset(adj_mat, rownames(adj_mat) %in% grey60_modProbes)#0
+
+#lightcyan
+probes = colnames(datExpr0)
+lightcyan_modules = c("lightcyan")
+lightcyan_inModule = is.finite(match(bwModuleColors, lightcyan_modules))
+lightcyan_modProbes = probes[lightcyan_inModule]
+lightcyan_list <- subset(adj_mat, rownames(adj_mat) %in% lightcyan_modProbes)#0
+#lightgreen
+probes = colnames(datExpr0)
+lightgreen_modules = c("lightgreen")
+lightgreen_inModule = is.finite(match(bwModuleColors, lightgreen_modules))
+lightgreen_modProbes = probes[lightgreen_inModule]
+lightgreen_list <- subset(adj_mat, rownames(adj_mat) %in% lightgreen_modProbes)#0
+
+#magenta
+probes = colnames(datExpr0)
+magenta_modules = c("magenta")
+magenta_inModule = is.finite(match(bwModuleColors, magenta_modules))
+magenta_modProbes = probes[magenta_inModule]
+magenta_list <- subset(adj_mat, rownames(adj_mat) %in% magenta_modProbes)#0
+#midnightblue
+probes = colnames(datExpr0)
+midnightblue_modules = c("midnightblue")
+midnightblue_inModule = is.finite(match(bwModuleColors, midnightblue_modules))
+midnightblue_modProbes = probes[midnightblue_inModule]
+midnightblue_list <- subset(adj_mat, rownames(adj_mat) %in% midnightblue_modProbes)#0
+#pink
+probes = colnames(datExpr0)
+pink_modules = c("pink")
+pink_inModule = is.finite(match(bwModuleColors, pink_modules))
+pink_modProbes = probes[pink_inModule]
+pink_list <- subset(adj_mat, rownames(adj_mat) %in% pink_modProbes)#0
+
+#purple
+probes = colnames(datExpr0)
+purple_modules = c("purple")
+purple_inModule = is.finite(match(bwModuleColors, purple_modules))
+purple_modProbes = probes[purple_inModule]
+purple_list <- subset(adj_mat, rownames(adj_mat) %in% purple_modProbes)
+
+#red
+probes = colnames(datExpr0)
+red_modules = c("red")
+red_inModule = is.finite(match(bwModuleColors, red_modules))
+red_modProbes = probes[red_inModule]
+red_list <- subset(adj_mat, rownames(adj_mat) %in% red_modProbes)
+
+#salmon
+probes = colnames(datExpr0)
+salmon_modules = c("salmon")
+salmon_inModule = is.finite(match(bwModuleColors, salmon_modules))
+salmon_modProbes = probes[salmon_inModule]
+salmon_list <- subset(adj_mat, rownames(adj_mat) %in% salmon_modProbes)#0
+
+#tan
+probes = colnames(datExpr0)
+tan_modules = c("tan")
+tan_inModule = is.finite(match(bwModuleColors, tan_modules))
+tan_modProbes = probes[tan_inModule]
+tan_list <- subset(adj_mat, rownames(adj_mat) %in% tan_modProbes)#0
+
+#tan
+probes = colnames(datExpr0)
+turquoise_modules = c("turquoise")
+turquoise_inModule = is.finite(match(bwModuleColors, turquoise_modules))
+turquoise_modProbes = probes[turquoise_inModule]
+turquoise_list <- subset(adj_mat, rownames(adj_mat) %in% turquoise_modProbes)
+
+#rownames(yellow_list) <- subset(yellow_list, colnames(yellow_list) %in% modProbes)
+#nrow(yellow_list)
+#yellow_list$color <- rep("yellow", nrow(yellow_list))
+#yellow_sub <- data.frame(row.names(yellow_list),yellow_list$color)
+#network <- graph.adjacency(yellow_list)
 #head(network)
+#network <- simplify(network)  # removes self-loops
+#results <- blockwiseModules(data, power=6, TOMType="unsigned", networkType="unsigned")
+#V(network)$color <- results$colors
+#par(mar=c(0,0,0,0))
+# remove unconnected nodes
+#network <- delete.vertices(network, degree(network)==0)
+#pdf(file = "/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/network_all_abiotic_VST#.pdf",width = 25,height = 25)
+#plot(network, vertex.color="yellow", vertex.label="",vertex.size=2,layout=layout_in_circle(network), edge.arrow.size = 0.2)
+#plot(network, vertex.color="yellow",vertex.label="",vertex.size=2, layout=layout.fruchterman.reingold(network), edge.arrow.size = 0.2)
+
+#dev.off()
+####
+network <- graph.adjacency(adj_mat,mode = "undirected",weighted = TRUE,)
+head(network)
+E(network)
+V(network)[rownames(yellow_list)]$color <- "yellow"
+V(network)[rownames(cyan_list)]$color <- "cyan"
+V(network)[rownames(blue_list)]$color <- "blue"
+V(network)[rownames(green_list)]$color <- "green"
+V(network)[rownames(greeny_list)]$color <- "greenyellow"
+V(network)[rownames(brown_list)]$color <- "brown"
+V(network)[rownames(black_list)]$color <- "black"
+V(network)[rownames(grey)]$color <- "grey"
+V(network)[rownames(grey60_list)]$color <- "grey60"
+V(network)[rownames(purple_list)]$color <- "purple"
+V(network)[rownames(red_list)]$color <- "red"
+V(network)[rownames(tan_list)]$color <- "tan"
+V(network)[rownames(turquoise_list)]$color <- "turquoise"
+
+#all[rownames(yellow_list)]
+#all[rownames(yellow_list)]
 network <- simplify(network)  # removes self-loops
 #results <- blockwiseModules(data, power=6, TOMType="unsigned", networkType="unsigned")
 #V(network)$color <- results$colors
@@ -255,13 +429,13 @@ par(mar=c(0,0,0,0))
 network <- delete.vertices(network, degree(network)==0)
 pdf(file = "/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/network_all_abiotic_VST#.pdf",width = 25,height = 25)
 #plot(network, vertex.color="yellow", vertex.label="",vertex.size=2,layout=layout_in_circle(network), edge.arrow.size = 0.2)
-plot(network, vertex.color="yellow",vertex.label="",vertex.size=2, layout=layout.fruchterman.reingold(network), edge.arrow.size = 0.2)
+plot(network,pch=19,arrow.mode=0,mark.border=NA, edge.color = "#d1d1e0", vertex.label="",vertex.size=2.5, layout=layout.fruchterman.reingold(network), edge.arrow.size = 0.2)
 
 dev.off()
 #plot(network, vertex.color="yellow", vertex.label="",vertex.size=2,layout=layout_in_circle(network), edge.arrow.size = 0.2)
 ##It works! But how can I figure out the modules?
 ############Subset the network:
-top.n.edges = 3000
+top.n.edges = 500
 min.edge = 2
 adj_mat<-adjacency(datExpr0,power=8)
 
@@ -289,6 +463,7 @@ rs<-rowSums(adj_mat)
 if(verbose) cat("removing unconnected nodes\n")
 adj_mat<-adj_mat[rs>min.edge,rs>min.edge]
 message("number of genes present = ", nrow(adj_mat))
+#123 node genes!!!!
 head(adj_mat)
 network <- graph.adjacency(adj_mat)
 #head(network)
@@ -300,11 +475,18 @@ par(mar=c(0,0,0,0))
 network <- delete.vertices(network, degree(network)==0)
 pdf(file = "/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/network_all_abiotic_VST#.pdf",width = 25,height = 25)
 #plot(network, vertex.color="yellow", vertex.label="",vertex.size=2,layout=layout_in_circle(network), edge.arrow.size = 0.2)
-plot(network, vertex.color="yellow",vertex.label="",vertex.size=2, layout=layout.fruchterman.reingold(network), edge.arrow.size = 0.2)
+plot(network, arrow.mode=0, vertex.color="yellow",vertex.size=5,vertex.label="", layout=layout.fruchterman.reingold(network), edge.arrow.size = 0.05)
 
 dev.off()
-
-
+#cyt = exportNetworkToCytoscape(adj_mat,
+#                               edgeFile = paste("abiotic-yellow-filter_edges-", paste(modules, collapse="-"), ".txt", sep=""),
+#                               nodeFile = paste("abiotic-yellow-filter_nodes-", paste(modules, collapse="-"), ".txt", sep=""),
+#                               weighted = TRUE,
+#                               threshold = 0.02,
+#                              nodeNames = modProbes,
+##                               #altNodeNames = modGenes,
+#                               nodeAttr = bwModuleColors[inModule])
+getwd()
 ######It works!!!
 #####Build the network!!!
 adj <- modTOM
@@ -442,7 +624,7 @@ if (corType=="pearson") {
   geneModuleMembership = geneModuleMembershipA$bicor
   MMPvalue   = geneModuleMembershipA$p
 }
-
+head(geneModuleMembership)
 
 if (corType=="pearson") {
   geneTraitCor = as.data.frame(cor(datExpr0, traitData, use = "p"))
@@ -548,3 +730,4 @@ dev.off()
 #tan_list <- names(datExpr0)[bwModuleColors=="tan"]
 #write.csv(black_list, file = "/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/abiotic_tan_list_VST#.csv")
 #About the visualization of the network with igraph
+
