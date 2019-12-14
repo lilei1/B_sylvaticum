@@ -219,7 +219,7 @@ rankGenes <- function(x){
   kMErank <- rank(-kMEs[ ,x])
   genes <- rownames(kMEs)
   genes <- genes[order(kMErank)]
-  #genes[1:50]#top 50 hub genes!!!
+  genes[1:50]#top 50 hub genes!!!
 }
 
 topGenes <- lapply(1:ncol(kMEs), rankGenes)
@@ -259,6 +259,7 @@ adj_mat<-adj_mat[rs>min.edge,rs>min.edge]
 message("number of genes present = ", nrow(adj_mat))
 test <- data.frame(adj_mat)
 #row.names(test)[modProbes,])
+#extract the genes in each module 
 #yellow
 probes = colnames(datExpr0)
 yellow_modules = c("yellow")
@@ -405,6 +406,7 @@ turquoise_list <- subset(adj_mat, rownames(adj_mat) %in% turquoise_modProbes)
 network <- graph.adjacency(adj_mat,mode = "undirected",weighted = TRUE,)
 head(network)
 E(network)
+#match genes from each modules to the network
 V(network)[rownames(yellow_list)]$color <- "yellow"
 V(network)[rownames(cyan_list)]$color <- "cyan"
 V(network)[rownames(blue_list)]$color <- "blue"
@@ -434,7 +436,8 @@ plot(network,pch=19,arrow.mode=0,mark.border=NA, edge.color = "#d1d1e0", vertex.
 dev.off()
 #plot(network, vertex.color="yellow", vertex.label="",vertex.size=2,layout=layout_in_circle(network), edge.arrow.size = 0.2)
 ##It works! But how can I figure out the modules?
-############Subset the network:
+
+############Subset the network, e.g. yellow:
 top.n.edges = 500
 min.edge = 2
 adj_mat<-adjacency(datExpr0,power=8)
@@ -486,14 +489,14 @@ dev.off()
 #                              nodeNames = modProbes,
 ##                               #altNodeNames = modGenes,
 #                               nodeAttr = bwModuleColors[inModule])
-getwd()
+#getwd()
 ######It works!!!
 #####Build the network!!!
-adj <- modTOM
-adj[adj > 0.1] = 1
-adj[adj != 1] = 0
-network <- graph.adjacency(adj)
-network <- simplify(network) 
+#adj <- modTOM
+#adj[adj > 0.1] = 1
+#adj[adj != 1] = 0
+#network <- graph.adjacency(adj)
+#network <- simplify(network) 
 #######!!!!!!!!!!!!!!!!!!
 
 
@@ -509,7 +512,7 @@ network <- simplify(network)
 #        main = "Network heatmap plot, all genes")
 #dev.off()
 
-###subset the gens and test partial of the data:
+###subset the gens and test partial of the data for TOM plot:
 load(bwnet$TOMFiles[1], verbose=T)
 TOM <- as.matrix(TOM)
 dissTOM = 1-TOM
@@ -538,43 +541,43 @@ dev.off()
 #                               weighted = TRUE, threshold = 0,
 #                               nodeNames = probes, nodeAttr = bwModuleColors)
 
-###Subset the network:
-probes = colnames(datExpr0)
-modules = c("yellow")
-inModule = is.finite(match(bwModuleColors, modules))
-modProbes = probes[inModule]
+###Subset the network for testing:
+#probes = colnames(datExpr0)
+#modules = c("yellow")
+#inModule = is.finite(match(bwModuleColors, modules))
+#modProbes = probes[inModule]
 #modGenes = annot$gene_symbol[match(modProbes, annot$substanceBXH)];
 #head(TOM)
-modTOM = TOM[inModule, inModule]
-dimnames(modTOM) = list(modProbes, modProbes)
+#modTOM = TOM[inModule, inModule]
+#dimnames(modTOM) = list(modProbes, modProbes)
 # Export the network into edge and node list files Cytoscape can read
-cyt = exportNetworkToCytoscape(modTOM,
-edgeFile = paste("abiotic-yellow-edges-", paste(modules, collapse="-"), ".txt", sep=""),
-nodeFile = paste("abiotic-yellow-nodes-", paste(modules, collapse="-"), ".txt", sep=""),
-weighted = TRUE,
-threshold = 0.02,
-nodeNames = modProbes,
+#cyt = exportNetworkToCytoscape(modTOM,
+#edgeFile = paste("abiotic-yellow-edges-", paste(modules, collapse="-"), ".txt", sep=""),
+#nodeFile = paste("abiotic-yellow-nodes-", paste(modules, collapse="-"), ".txt", sep=""),
+#weighted = TRUE,
+#threshold = 0.02,
+#nodeNames = modProbes,
 #altNodeNames = modGenes,
-nodeAttr = bwModuleColors[inModule])
-getwd()
+#nodeAttr = bwModuleColors[inModule])
+#getwd()
 ######It works!!!
 #####Build the network!!!
-adj <- modTOM
-adj[adj > 0.1] = 1
-adj[adj != 1] = 0
-network <- graph.adjacency(adj)
-network <- simplify(network)  # removes self-loops
+#adj <- modTOM
+#adj[adj > 0.1] = 1
+#adj[adj != 1] = 0
+#network <- graph.adjacency(adj)
+#network <- simplify(network)  # removes self-loops
 #results <- blockwiseModules(data, power=6, TOMType="unsigned", networkType="unsigned")
 #V(network)$color <- results$colors
-par(mar=c(0,0,0,0))
+#par(mar=c(0,0,0,0))
 # remove unconnected nodes
-network <- delete.vertices(network, degree(network)==0)
-pdf(file = "/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/network_yellow_abiotic_voom.pdf",width = 25,height = 25)
-plot(network, vertex.color="yellow", layout=layout.fruchterman.reingold(network), edge.arrow.size = 0.2)
-plot(network, vertex.color="yellow", vertex.label="",vertex.size=2,layout=layout_in_circle(network), edge.arrow.size = 0.2)
+#network <- delete.vertices(network, degree(network)==0)
+#pdf(file = "/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/network_yellow_abiotic_voom.pdf",width = 25,height = 25)
+#plot(network, vertex.color="yellow", layout=layout.fruchterman.reingold(network), edge.arrow.size = 0.2)
+#plot(network, vertex.color="yellow", vertex.label="",vertex.size=2,layout=layout_in_circle(network), edge.arrow.size = 0.2)
 
 
-dev.off()
+#dev.off()
 
 #######It works!!!
 
