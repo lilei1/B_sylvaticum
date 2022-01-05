@@ -1,23 +1,11 @@
-#Written by Li Lei 12-19-2019 Berkeley
+#Written by Li Lei 2020-11-02
+#This script is for calling the DGE for the cold datasets and 
 source("https://bioconductor.org/biocLite.R")
 biocLite("edgeR", dependencies=TRUE, INSTALL_opts = c('--no-lock'))
 #biocLite("httr", dependencies=TRUE, INSTALL_opts = c('--no-lock'))
 biocLite("Hmisc")
 biocLite("DESeq2")
-#biocLite("devtools")
-#devtools::install_github('kevinblighe/EnhancedVolcano')
 
-#if (!requireNamespace('BiocManager', quietly = TRUE))
-#  install.packages('BiocManager', dependencies=TRUE, INSTALL_opts = c('--no-lock'))
-#BiocManager::install('DESeq2', dependencies=TRUE, INSTALL_opts = c('--no-lock'))
-#BiocManager::install('latticeExtra', dependencies=TRUE, INSTALL_opts = c('--no-lock'))
-
-
-#BiocManager::install('EnhancedVolcano', dependencies=TRUE, INSTALL_opts = c('--no-lock'))
-#BiocManager::install('ggplot2', dependencies=TRUE, INSTALL_opts = c('--no-lock'))
-#library(EnhancedVolcano)
-#library(airway)
-#library(magrittr)
 library(ggplot2)
 library(edgeR)
 library(DESeq2)
@@ -30,17 +18,20 @@ counts <- read.delim("/global/projectb/scratch/vrsingan/SeanGordon_Sylvaticum/ge
 head(counts)
 nrow(counts)
 #36927
-
-#head <- read.delim("/global/projectb/scratch/llei2019/Brachypodium/Sylvaticum/RNAseq/tmp_counts_head.txt",header = F)
-#colnames(counts) <- head$V2 #change the headers
-#Just focus on the shoot along the time point
-counts <- subset(counts,select = c(1:60))#take the subset of the data
-#counts$Shoot_salt_24h.s3 <- NULL
-#meta.data <- read.delim("/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/meta_abio.txt",header = T)
-meta.data <- read.delim("/global/projectb/scratch/llei2019/Brachypodium/Sylvaticum/RNAseq/coldata_abiotic_shoot.txt",header = T)
-head(meta.data)
-nrow(meta.data)
-group <- paste0(meta.data$treatment, ".", meta.data$time)
+metaData <- read.delim("/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/shoot_abiotic_freeze_tissues_meta.txt",header = T)
+head(metaData)
+nrow(metaData)
+#78
+#extract the column I needed!!!
+col.num <- which( colnames(counts) %in% metaData$code)
+row.num <- which( metaData$code %in% colnames(counts) )
+counts <- counts[, col.num]
+mata <- metaData[row.num,]
+ncol(counts)
+head(counts)
+colnames(counts) <- metaData$exp
+head(counts)
+metaData$group <- paste0(metaData$tissue, ".", metaData$treatment,".", metaData$time)
 #Find the best cutoff for the downstream analysis
 #This is to convert a dataframe into single column.
 counts_long <- gather(counts,code,counts)
@@ -48,157 +39,31 @@ head(counts_long)
 #nrow(counts_long)
 #this is to find the reasonable cutoff for the threshold setting
 quantile(counts_long$counts,probs=seq(0,1,0.01))
-#  0%     1%     2%     3%     4%     5%     6%     7%     8%     9%    10%    11%    12% 
+#0%     1%     2%     3%     4%     5%     6%     7%     8%     9%    10%    11%    12% 
 #0      0      0      0      0      0      0      0      0      0      0      0      0 
 #13%    14%    15%    16%    17%    18%    19%    20%    21%    22%    23%    24%    25% 
 #0      0      0      0      0      0      0      0      0      0      0      0      0 
 #26%    27%    28%    29%    30%    31%    32%    33%    34%    35%    36%    37%    38% 
-#0      0      0      0      0      0      0      1      1      1      1      1      2 
+#0      0      0      0      0      0      0      1      1      1      1      2      2 
 #39%    40%    41%    42%    43%    44%    45%    46%    47%    48%    49%    50%    51% 
-#2      3      3      4      4      5      6      7      8     10     11     13     15 
+#2      3      3      4      5      6      6      8      9     10     12     14     16 
 #52%    53%    54%    55%    56%    57%    58%    59%    60%    61%    62%    63%    64% 
-#17     20     23     26     29     33     38     42     48     53     60     67     74 
+#18     20     23     26     30     33     37     42     47     52     58     65     72 
 #65%    66%    67%    68%    69%    70%    71%    72%    73%    74%    75%    76%    77% 
-#82     91    100    111    122    134    147    160    175    191    209    228    248 
+#80     88     97    106    117    128    140    153    166    181    197    214    233 
 #78%    79%    80%    81%    82%    83%    84%    85%    86%    87%    88%    89%    90% 
-#270    295    320    349    380    414    452    494    540    592    651    717    794 
+#253    275    299    324    353    384    418    457    499    546    599    660    731 
 #91%    92%    93%    94%    95%    96%    97%    98%    99%   100% 
-#  885    994   1129   1301   1534   1862   2375   3322   5744 569218 
-head(counts)
-count.cutoff = 3 # 60% of the data were above 3
+#  814    915   1037   1192   1403   1697   2155   3000   5132 569218  
+
+count.cutoff = 5 # 57% of the data were above 5
 bioreplicates.cutoff = 3
 ## RAW COUNTS ##
 keep <- rowSums(counts >= count.cutoff) >= bioreplicates.cutoff
 counts <- counts[keep, ]
 #?rowSums
 nrow(counts)
-#[1] 26421
-normalized.counts <- cpm(counts)
-head(normalized.counts)
-normalized.counts.re <- data.frame(normalized.counts)
-head(normalized.counts.re)
-normalized.counts_long <- gather(normalized.counts.re,code,counts)
-quantile(normalized.counts_long$counts,probs=seq(0,1,0.01))
-#0%           1%           2%           3%           4%           5%           6% 
-#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 
-#7%           8%           9%          10%          11%          12%          13% 
-#0.000000e+00 0.000000e+00 5.168025e-02 5.837050e-02 6.294471e-02 7.050105e-02 9.484186e-02 
-#14%          15%          16%          17%          18%          19%          20% 
-#1.134373e-01 1.319454e-01 1.549899e-01 1.751115e-01 2.015789e-01 2.308456e-01 2.584012e-01 
-#21%          22%          23%          24%          25%          26%          27% 
-#2.933894e-01 3.345268e-01 3.723011e-01 4.204855e-01 4.742093e-01 5.253345e-01 5.837502e-01 
-#28%          29%          30%          31%          32%          33%          34% 
-#6.502081e-01 7.242551e-01 8.059097e-01 8.863553e-01 9.853936e-01 1.084930e+00 1.198233e+00 
-#35%          36%          37%          38%          39%          40%          41% 
-#1.314175e+00 1.449616e+00 1.588921e+00 1.747017e+00 1.904435e+00 2.084500e+00 2.273768e+00 
-#42%          43%          44%          45%          46%          47%          48% 
-#2.475294e+00 2.703537e+00 2.935814e+00 3.182274e+00 3.452616e+00 3.735666e+00 4.034104e+00 
-#49%          50%          51%          52%          53%          54%          55% 
-#4.361200e+00 4.703509e+00 5.068935e+00 5.442631e+00 5.850763e+00 6.282443e+00 6.736300e+00 
-#56%          57%          58%          59%          60%          61%          62% 
-#7.208094e+00 7.715582e+00 8.246659e+00 8.809321e+00 9.397890e+00 1.002064e+01 1.068758e+01 
-#63%          64%          65%          66%          67%          68%          69% 
-#1.138758e+01 1.212329e+01 1.290105e+01 1.371986e+01 1.459372e+01 1.551036e+01 1.648214e+01 
-#70%          71%          72%          73%          74%          75%          76% 
-#1.750283e+01 1.858619e+01 1.974997e+01 2.097001e+01 2.229044e+01 2.369034e+01 2.520973e+01 
-#77%          78%          79%          80%          81%          82%          83% 
-#2.681399e+01 2.852955e+01 3.039431e+01 3.237739e+01 3.454449e+01 3.685717e+01 3.934653e+01 
-#84%          85%          86%          87%          88%          89%          90% 
-#4.212751e+01 4.520064e+01 4.862248e+01 5.244484e+01 5.678486e+01 6.179615e+01 6.769817e+01 
-#91%          92%          93%          94%          95%          96%          97% 
-#7.457202e+01 8.312925e+01 9.359878e+01 1.068847e+02 1.245855e+02 1.504111e+02 1.912071e+02 
-#98%          99%         100% 
-#2.634619e+02 4.568648e+02 2.980066e+04
-head(normalized.counts_long)
-count.cutoff = 1 #86% of the data is above 1
-bioreplicates.cutoff = 3
-keep <- rowSums(normalized.counts >= count.cutoff) >= bioreplicates.cutoff
-#abiotic_shoot_count(keep)
-normalized.counts <- normalized.counts[keep, ]
-nrow(normalized.counts)
-#[1] 21821
-nrow(counts)
-#26421
-#keep the datapoint pass the threshold
-counts <- counts[row.names(normalized.counts),]
-nrow(counts)
-#21821
-grep("Brasy1G039900", rownames(counts))#check if this CBF got filtered, CBF alos for drought
-#[1] 255
-ncol(counts)
-#60
-design <- model.matrix(~0 + group,meta.data)
-#dds <- DESeqDataSetFromMatrix(countData = counts, colData = meta.data, design = ~ treatment+time+treatment:time)
-dds <- DESeqDataSetFromMatrix(countData = counts, colData = meta.data, design = design)
-
-#mm <- model.matrix(~time + treatment:time, meta.data)
-#mm <- model.matrix(~treatment + time + time:treatment, meta.data)
-
-#all.zero <- apply(mm, 2, function(x) all(x == 0))
-#mm.full <- mm[, !all.zero]
-#mm.reduced <- model.matrix(~time + treatment, meta.data)
-#mm.reduced <- model.matrix(~treatment + time, meta.data)
-
-#ddsTC <- DESeq(dds, full = mm.full, reduced = mm.reduced, test="LRT")
-ddsTC <- DESeq(dds)
-result <- results(ddsTC)
-head(result)
-#heatmap:
-library("pheatmap")
-rld <- vst( ddsTC )
-#head(heatmap.genes)
-#expr.vst <- assay(DESeq2::vst(ddsTC))
-head(rld)
-library( "genefilter" )
-#install.packages("gtools", "gdata", "caTools")
-library(gplots)
-topVarGenes <- head( order( rowVars( assay(rld) ), decreasing=TRUE ), 100 )
-head(topVarGenes)
-#dev.off()
-pdf(file = "/global/projectb/scratch/llei2019/Brachypodium/Sylvaticum/RNAseq/heatmap_100_DGE_vst_syl.pdf",width = 15,height = 15)
-
-par(mar=c(1,1,1,1))
-#heatmap(assay(rld)[ topVarGenes, ],
-#        labRow = "",
-#        scale = "row")
-palette <- colorRampPalette(c("red","white","blue"))(256)
-
-heatmap.2( assay(rld)[ topVarGenes, ], scale="row", Colv=FALSE, 
-           trace="none", dendrogram='none', 
-           col = palette,
-           lhei = c(0.8,7),
-           ColSideColors = c( CK="gray", heat="#ff8000", drought="#ffff00",salt="#0066ff")[
-             colData(rld)$treatment ] )
-
-#heatmap.2( assay(rld)[ topVarGenes, ], scale="row", Colv=FALSE, 
-#           trace="none", dendrogram='none', 
-#           col = colorRampPalette( rev(brewer.pal(9, "RdBu")) )(255),
-#           ColSideColors = c( CK="gray", heat="#ff8000", drought="#ffff00",salt="#0066ff")[
-#             colData(rld)$treatment ] )
-dev.off()
-#Since the salt-24hs is werid, so I have to delete it and redo it!
-counts <- read.delim("/global/projectb/scratch/vrsingan/SeanGordon_Sylvaticum/gene_counts/counts.txt", row.names = 1)
-head(counts)
-nrow(counts)
-#36927
-
-head <- read.delim("/global/projectb/scratch/llei2019/Brachypodium/Sylvaticum/RNAseq/tmp_counts_head.txt",header = F)
-colnames(counts) <- head$V2 #change the headers
-counts <- subset(counts,select = c(1:60))#take the subset of the data
-counts$Shoot_salt_24h.s3 <- NULL
-#meta.data <- read.delim("/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/meta_abio.txt",header = T)
-meta.data <- read.delim("/global/projectb/scratch/llei2019/Brachypodium/Sylvaticum/RNAseq/coldata_abiotic_shoot_nosalt24hs3.txt",header = T)
-head(meta.data)
-group <- paste0(meta.data$treatment, ".", meta.data$time)
-####do filtering with raw count
-count.cutoff = 3 # 10 #above 60% of the datapoint is greater than 3;
-bioreplicates.cutoff = 3
-## RAW COUNTS ##
-keep <- rowSums(counts >= count.cutoff) >= bioreplicates.cutoff
-counts <- counts[keep, ]
-#?rowSums
-nrow(counts)
-#26386
+#[1] 27140
 #CPM filtering
 normalized.counts <- cpm(counts)
 head(normalized.counts)
@@ -213,113 +78,1319 @@ quantile(normalized.counts_long$counts,probs=seq(0,1,0.01))
 #0%           1%           2%           3%           4%           5%           6% 
 #0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 
 #7%           8%           9%          10%          11%          12%          13% 
-#0.000000e+00 0.000000e+00 5.235372e-02 5.910984e-02 6.344763e-02 7.334741e-02 9.643267e-02 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 4.838580e-02 5.909170e-02 6.817774e-02 
 #14%          15%          16%          17%          18%          19%          20% 
-#1.181810e-01 1.363530e-01 1.573112e-01 1.783206e-01 2.050308e-01 2.371060e-01 2.637600e-01 
+#8.744439e-02 1.094905e-01 1.226319e-01 1.451574e-01 1.778323e-01 2.088698e-01 2.406241e-01 
 #21%          22%          23%          24%          25%          26%          27% 
-#2.997233e-01 3.391749e-01 3.793678e-01 4.245458e-01 4.821634e-01 5.347530e-01 5.944021e-01 
+#2.727110e-01 3.137113e-01 3.525105e-01 4.031659e-01 4.529188e-01 5.053415e-01 5.671964e-01 
 #28%          29%          30%          31%          32%          33%          34% 
-#6.638936e-01 7.364594e-01 8.182815e-01 9.036288e-01 9.963042e-01 1.102318e+00 1.209632e+00 
+#6.298371e-01 7.098541e-01 7.894364e-01 8.761384e-01 9.691693e-01 1.075682e+00 1.190117e+00 
 #35%          36%          37%          38%          39%          40%          41% 
-#1.332400e+00 1.468238e+00 1.612313e+00 1.763523e+00 1.929351e+00 2.110080e+00 2.301746e+00 
+#1.311666e+00 1.447748e+00 1.586234e+00 1.747052e+00 1.912198e+00 2.090169e+00 2.292927e+00 
 #42%          43%          44%          45%          46%          47%          48% 
-#2.507249e+00 2.727061e+00 2.967300e+00 3.223724e+00 3.491775e+00 3.776889e+00 4.087116e+00 
+#2.502366e+00 2.719094e+00 2.958737e+00 3.224156e+00 3.494105e+00 3.784441e+00 4.093898e+00 
 #49%          50%          51%          52%          53%          54%          55% 
-#4.405009e+00 4.748449e+00 5.111858e+00 5.498897e+00 5.902391e+00 6.335618e+00 6.793728e+00 
+#4.428071e+00 4.777328e+00 5.150269e+00 5.539055e+00 5.956150e+00 6.399487e+00 6.871341e+00 
 #56%          57%          58%          59%          60%          61%          62% 
-#7.261393e+00 7.778986e+00 8.307065e+00 8.863575e+00 9.460074e+00 1.008167e+01 1.075171e+01 
+#7.368454e+00 7.894371e+00 8.438763e+00 9.016584e+00 9.636654e+00 1.029541e+01 1.098310e+01 
 #63%          64%          65%          66%          67%          68%          69% 
-#1.145211e+01 1.219117e+01 1.296912e+01 1.378981e+01 1.466035e+01 1.557704e+01 1.654378e+01 
+#1.170171e+01 1.247234e+01 1.327815e+01 1.412856e+01 1.503316e+01 1.598969e+01 1.698534e+01 
 #70%          71%          72%          73%          74%          75%          76% 
-#1.756642e+01 1.865082e+01 1.982197e+01 2.103486e+01 2.234953e+01 2.375831e+01 2.526756e+01 
+#1.804467e+01 1.916126e+01 2.036515e+01 2.162756e+01 2.298362e+01 2.441637e+01 2.596635e+01 
 #77%          78%          79%          80%          81%          82%          83% 
-#2.686494e+01 2.858482e+01 3.044196e+01 3.242007e+01 3.458186e+01 3.688242e+01 3.936675e+01 
+#2.758641e+01 2.933384e+01 3.125668e+01 3.328510e+01 3.549205e+01 3.784830e+01 4.042893e+01 
 #84%          85%          86%          87%          88%          89%          90% 
-#4.213333e+01 4.520423e+01 4.862209e+01 5.243141e+01 5.675808e+01 6.175047e+01 6.762812e+01 
+#4.328829e+01 4.643321e+01 4.988618e+01 5.375962e+01 5.815649e+01 6.330030e+01 6.924917e+01 
 #91%          92%          93%          94%          95%          96%          97% 
-#7.448751e+01 8.300526e+01 9.340574e+01 1.066931e+02 1.243500e+02 1.500766e+02 1.908709e+02 
+#7.625796e+01 8.486130e+01 9.531010e+01 1.085441e+02 1.259667e+02 1.513829e+02 1.908668e+02 
 #98%          99%         100% 
-#2.629703e+02 4.562462e+02 2.980068e+04  
-count.cutoff = 1 #86% of the data is above 1
+#2.599490e+02 4.430294e+02 4.828322e+04 
+
+count.cutoff = 1 #67% of the data is above 1
 bioreplicates.cutoff = 3
 keep <- rowSums(normalized.counts >= count.cutoff) >= bioreplicates.cutoff
 #abiotic_shoot_count(keep)
 normalized.counts <- normalized.counts[keep, ]
 nrow(normalized.counts)
-#21794
+#24733
 nrow(counts)
-#26386
+#27140
 #keep the datapoint pass the threshold
 counts <- counts[row.names(normalized.counts),]
 nrow(counts)
-#21794
-#counts[21822,]
-grep("Brasy3G282900", rownames(counts))#check if this gene hsp gene got filtered
-#8339
+#24733
+grep("Brasy1G039900", rownames(counts))#check if this CBF got filtered
+#289
 #it suggested that the filtering seems good!
-#21794/36927=0.5901915 only keep around 60% genes
+#21794/36927=0.6697809 only keep around 63% genes
 
 ## VST instead of voom
-#counts[is.na(counts)] <- 0
+ncol(counts)
+head(metaData)
 #creat a group 
-design <- model.matrix(~0 + group,meta.data)
-dds <- DESeq2::DESeqDataSetFromMatrix(countData = counts, colData = meta.data, design = design)
+design <- model.matrix(~0 + group,metaData)
+dds <- DESeq2::DESeqDataSetFromMatrix(countData = counts, colData = metaData, design = design)
+head(counts(dds))
 expr.vst <- assay(DESeq2::vst(dds))
 head(expr.vst)
 #str(expr.vst)
 expr.vst <- as.data.frame(expr.vst)
 #This file is for WGCNA
 write.table(x = expr.vst,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/normalized_VST_final_shoot_abiotic_formal.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/normalized_VST_final_shoot_abiotic_freeze_tissue_formal.txt",
             sep = "\t",
             eol = "\n",
             col.names = TRUE,
             row.names = TRUE
-            )
-
-
-nrow(dds)
-#21794
-#nrow(dds2)
-#21790
-
+)
+###check the data look like:
+#PCA
 ddsTC <- DESeq(dds)
-result <- results(ddsTC)
-head(result)
-#heatmap:
 library("pheatmap")
 rld <- vst( ddsTC )
-#head(heatmap.genes)
-#expr.vst <- assay(DESeq2::vst(ddsTC))
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/PCA_shoot_abiotic_freeze_tissue_syl_test.pdf",width = 15,height = 15)
+par(mar=c(1,1,1,1))
+plotPCA(rld, intgroup="group")
+dev.off()
+colData(dds)
 head(rld)
+###HIERRACHYCHER CLUSTERING:
+### Extract the rlog matrix from the object
+rld_mat <- assay(rld)    ## assay() is function from the "SummarizedExperiment" package that was loaded when you loaded DESeq2
+### Compute pairwise correlation values
+rld_cor <- cor(rld_mat)    ## cor() is a base R function
+
+head(rld_cor)   ## check the output of cor(), make note of the rownames and colnames
+### Plot heatmap
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sampletree_shoot_abiotic_freeze_tissue_syl_test.pdf",width = 15,height = 15)
+pheatmap(rld_cor)
+dev.off()
+#Shoot_salt_24h.s3 is an outlier and need to get rid of it and rerun evything
+counts <- read.delim("/global/projectb/scratch/vrsingan/SeanGordon_Sylvaticum/gene_counts/counts.txt", row.names = 1)
+head(counts)
+nrow(counts)
+#36927
+metaData <- read.delim("/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/shoot_abiotic_freeze_tissues_meta_no_salt24s3.txt",header = T)
+head(metaData)
+nrow(metaData)
+#77
+#extract the column I needed!!!
+col.num <- which( colnames(counts) %in% metaData$code)
+row.num <- which( metaData$code %in% colnames(counts) )
+counts <- counts[, col.num]
+mata <- metaData[row.num,]
+ncol(counts)
+head(counts)
+colnames(counts) <- metaData$exp
+head(counts)
+metaData$group <- paste0(metaData$tissue, ".", metaData$treatment,".", metaData$time)
+#Find the best cutoff for the downstream analysis
+#This is to convert a dataframe into single column.
+counts_long <- gather(counts,code,counts)
+head(counts_long)
+#nrow(counts_long)
+#this is to find the reasonable cutoff for the threshold setting
+quantile(counts_long$counts,probs=seq(0,1,0.01))
+#0%        1%        2%        3%        4%        5%        6%        7%        8% 
+#0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00 
+#9%       10%       11%       12%       13%       14%       15%       16%       17% 
+#0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00 
+#18%       19%       20%       21%       22%       23%       24%       25%       26% 
+#0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00 
+#27%       28%       29%       30%       31%       32%       33%       34%       35% 
+#0.00      0.00      0.00      0.00      0.00      0.00      1.00      1.00      1.00 
+#36%       37%       38%       39%       40%       41%       42%       43%       44% 
+#1.00      2.00      2.00      2.00      3.00      3.00      4.00      5.00      6.00 
+#45%       46%       47%       48%       49%       50%       51%       52%       53% 
+#7.00      8.00      9.00     10.00     12.00     14.00     16.00     18.00     20.00 
+#54%       55%       56%       57%       58%       59%       60%       61%       62% 
+#23.00     26.00     30.00     33.00     38.00     42.00     47.00     53.00     59.00 
+#63%       64%       65%       66%       67%       68%       69%       70%       71% 
+#65.00     72.00     80.00     88.00     97.00    107.00    117.00    128.00    140.00 
+#72%       73%       74%       75%       76%       77%       78%       79%       80% 
+#153.00    167.00    181.00    197.00    214.00    233.00    253.00    275.00    299.00 
+#81%       82%       83%       84%       85%       86%       87%       88%       89% 
+#324.00    353.00    384.00    418.00    456.00    498.00    545.00    598.00    659.00 
+#90%       91%       92%       93%       94%       95%       96%       97%       98% 
+#729.00    812.00    912.00   1033.00   1188.00   1397.00   1690.00   2145.00   2985.00 
+#99%      100% 
+#  5104.22 569218.00 
+
+count.cutoff = 5 # 57% of the data were above 5
+bioreplicates.cutoff = 3
+## RAW COUNTS ##
+keep <- rowSums(counts >= count.cutoff) >= bioreplicates.cutoff
+counts <- counts[keep, ]
+#?rowSums
+nrow(counts)
+#[1] 27140
+#CPM filtering
+normalized.counts <- cpm(counts)
+head(normalized.counts)
+###below is for find the propriate threshold to do filtering based on the cpm normalization
+normalized.counts.re <- data.frame(normalized.counts)
+head(normalized.counts.re)
+normalized.counts_long <- gather(normalized.counts.re,code,counts)
+head(normalized.counts_long)
+#nrow(counts_long)
+#this is to find the reasonable cutoff for the threshold setting
+quantile(normalized.counts_long$counts,probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 
+#7%           8%           9%          10%          11%          12%          13% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 4.909967e-02 5.927746e-02 6.951026e-02 
+#14%          15%          16%          17%          18%          19%          20% 
+#9.270315e-02 1.096074e-01 1.240865e-01 1.527911e-01 1.814005e-01 2.097507e-01 2.414219e-01 
+#21%          22%          23%          24%          25%          26%          27% 
+#2.766148e-01 3.155492e-01 3.597880e-01 4.090667e-01 4.605940e-01 5.109602e-01 5.713647e-01 
+#28%          29%          30%          31%          32%          33%          34% 
+#6.345195e-01 7.218723e-01 8.032957e-01 8.849785e-01 9.819396e-01 1.085741e+00 1.204153e+00 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.323433e+00 1.459715e+00 1.604307e+00 1.761708e+00 1.929393e+00 2.111172e+00 2.304581e+00 
+#42%          43%          44%          45%          46%          47%          48% 
+#2.520406e+00 2.740186e+00 2.984456e+00 3.243691e+00 3.520767e+00 3.816107e+00 4.133037e+00 
+#49%          50%          51%          52%          53%          54%          55% 
+#4.459289e+00 4.812482e+00 5.189906e+00 5.580510e+00 5.999646e+00 6.444428e+00 6.913640e+00 
+#56%          57%          58%          59%          60%          61%          62% 
+#7.410370e+00 7.940596e+00 8.479908e+00 9.073076e+00 9.688920e+00 1.034684e+01 1.103688e+01 
+#63%          64%          65%          66%          67%          68%          69% 
+#1.175927e+01 1.252747e+01 1.332729e+01 1.418716e+01 1.508746e+01 1.604591e+01 1.703759e+01 
+#70%          71%          72%          73%          74%          75%          76% 
+#1.810390e+01 1.922564e+01 2.041401e+01 2.168625e+01 2.303213e+01 2.447371e+01 2.601382e+01 
+#77%          78%          79%          80%          81%          82%          83% 
+#2.763313e+01 2.938269e+01 3.130156e+01 3.332309e+01 3.551974e+01 3.787982e+01 4.045764e+01 
+#84%          85%          86%          87%          88%          89%          90% 
+#4.330510e+01 4.645489e+01 4.989851e+01 5.375963e+01 5.814789e+01 6.327262e+01 6.921033e+01 
+#91%          92%          93%          94%          95%          96%          97% 
+#7.620340e+01 8.478234e+01 9.519554e+01 1.084165e+02 1.258191e+02 1.511358e+02 1.905680e+02 
+#98%          99%         100% 
+#2.595441e+02 4.421887e+02 4.828323e+04 
+
+count.cutoff = 1 #67% of the data is above 1
+bioreplicates.cutoff = 3
+keep <- rowSums(normalized.counts >= count.cutoff) >= bioreplicates.cutoff
+#abiotic_shoot_count(keep)
+normalized.counts <- normalized.counts[keep, ]
+nrow(normalized.counts)
+#24724
+nrow(counts)
+#27140
+#keep the datapoint pass the threshold
+counts <- counts[row.names(normalized.counts),]
+nrow(counts)
+#24724
+grep("Brasy1G039900", rownames(counts))#check if this CBF got filtered
+#289
+#it suggested that the filtering seems good!
+#21794/36927=0.6695372 only keep around 63% genes
+24724/36927
+
+## VST instead of voom
+ncol(counts)
+head(metaData)
+#creat a group 
+design <- model.matrix(~0 + group,metaData)
+dds <- DESeq2::DESeqDataSetFromMatrix(countData = counts, colData = metaData, design = design)
+###check the data look like:
+#PCA
+ddsTC <- DESeq(dds)
+library("pheatmap")
+rld <- vst( ddsTC )
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/PCA_shoot_abiotic_freeze_tissue_syl_nosalt24s3.pdf",width = 15,height = 15)
+par(mar=c(1,1,1,1))
+plotPCA(rld, intgroup="group")
+dev.off()
+colData(dds)
+head(rld)
+###HIERRACHYCHER CLUSTERING:
+### Extract the rlog matrix from the object
+rld_mat <- assay(rld)    ## assay() is function from the "SummarizedExperiment" package that was loaded when you loaded DESeq2
+### Compute pairwise correlation values
+rld_cor <- cor(rld_mat)    ## cor() is a base R function
+
+head(rld_cor)   ## check the output of cor(), make note of the rownames and colnames
+### Plot heatmap
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sampletree_shoot_abiotic_freeze_tissue_syl_nosalt24s3.pdf",width = 15,height = 15)
+pheatmap(rld_cor)
+dev.off()
+
+expr.vst <- rld_mat
+#head(expr.vst)
+#str(expr.vst)
+expr.vst <- as.data.frame(expr.vst)
+#This file is for WGCNA
+write.table(x = expr.vst,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/normalized_VST_final_shoot_abiotic_freeze_tissue_nosalt24s3_formal.txt",
+            sep = "\t",
+            eol = "\n",
+            col.names = TRUE,
+            row.names = TRUE
+)
+
 library( "genefilter" )
 #install.packages("gplots")
 library(gplots)
-
-topVarGenes <- head( order( rowVars( assay(rld) ), decreasing=TRUE ), 100 )
+topVarGenes <- head( order( rowVars( assay(rld) ), decreasing=TRUE ), 1000 )
 head(topVarGenes)
 #dev.off()
-pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heatmap_100_DGE_nosalt24hs3_syl.pdf",width = 15,height = 15)
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heatmap_1000_shoot_abiotic_freeze_syl.pdf",width = 15,height = 15)
 
-par(mar=c(1,1,1,1)) 
+par(mar=c(1,1,1,1))
 #heatmap(assay(rld)[ topVarGenes, ],
 #        labRow = "",
 #        scale = "row")
 palette <- colorRampPalette(c("red","white","blue"))(256)
 
 heatmap.2( assay(rld)[ topVarGenes, ], scale="row", Colv=FALSE, 
-           trace="none", dendrogram='none', 
+           trace="none", dendrogram='row', 
            col = palette,
            lhei = c(0.8,7),
-           ColSideColors = c( CK="gray", heat="#ff8000", drought="#ffff00",salt="#0066ff")[
+           ColSideColors = c( cold="#11C5F6", freeze="#1149F6", recovery="gray")[
              colData(rld)$treatment ] )
 dev.off()
 
+head(expr.vst)
+##Filter genes with high variance:
+shootCK1h <- expr.vst[,1:3]
+head(shootCK1h)
+quantile (rowVars(shootCK1h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 8.214109e-05 
+#7%           8%           9%          10%          11%          12%          13% 
+#3.442680e-04 6.128140e-04 8.774449e-04 1.160284e-03 1.487948e-03 1.799656e-03 2.102410e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#2.439776e-03 2.785102e-03 3.096683e-03 3.419087e-03 3.752010e-03 4.110908e-03 4.479262e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#4.836400e-03 5.143411e-03 5.554725e-03 5.925771e-03 6.339135e-03 6.660841e-03 7.086688e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#7.525459e-03 7.914660e-03 8.290016e-03 8.722651e-03 9.148367e-03 9.593370e-03 9.986492e-03 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.050376e-02 1.102902e-02 1.149890e-02 1.202292e-02 1.258043e-02 1.310898e-02 1.367684e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#1.433831e-02 1.494838e-02 1.556973e-02 1.619438e-02 1.691366e-02 1.762138e-02 1.837313e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#1.896573e-02 1.962436e-02 2.037281e-02 2.115631e-02 2.194569e-02 2.276951e-02 2.375845e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#2.466385e-02 2.555570e-02 2.659407e-02 2.763081e-02 2.868850e-02 2.990647e-02 3.100935e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#3.214271e-02 3.358136e-02 3.483591e-02 3.620478e-02 3.769814e-02 3.920670e-02 4.079275e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#4.251153e-02 4.429152e-02 4.505381e-02 4.643055e-02 4.679271e-02 4.833523e-02 4.960599e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#5.232231e-02 5.481365e-02 5.765965e-02 6.036155e-02 6.336510e-02 6.708305e-02 7.069838e-02 
+#84%          85%          86%          87%          88%          89%          90% 
+#7.371518e-02 7.674840e-02 8.162418e-02 8.755672e-02 9.120451e-02 9.692525e-02 1.035706e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.112504e-01 1.210419e-01 1.324372e-01 1.440888e-01 1.611699e-01 1.841173e-01 2.281509e-01 
+#98%          99%         100% 
+#2.889950e-01 4.482836e-01 1.372333e+01 
+shootCK1h <- rownames(shootCK1h[rowVars(shootCK1h)<0.3,])
+#shootCK2h
+shootCK2h <- expr.vst[,4:6]
+head(shootCK2h)
+quantile (rowVars(shootCK2h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 7.262963e-05 
+#7%           8%           9%          10%          11%          12%          13% 
+#2.911866e-04 5.819696e-04 8.870125e-04 1.184057e-03 1.464548e-03 1.779243e-03 2.092598e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#2.417384e-03 2.716004e-03 3.041852e-03 3.366886e-03 3.700073e-03 4.024936e-03 4.385811e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#4.729721e-03 5.115657e-03 5.459334e-03 5.779850e-03 6.191905e-03 6.668440e-03 7.006661e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#7.495108e-03 7.885594e-03 8.310275e-03 8.811327e-03 9.196003e-03 9.659936e-03 1.013842e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.063238e-02 1.110367e-02 1.159773e-02 1.216263e-02 1.269502e-02 1.318718e-02 1.375895e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#1.443258e-02 1.501424e-02 1.563580e-02 1.632053e-02 1.691023e-02 1.762943e-02 1.826478e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#1.897380e-02 1.970412e-02 2.044052e-02 2.116037e-02 2.199703e-02 2.292319e-02 2.388066e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#2.488011e-02 2.580957e-02 2.667095e-02 2.766622e-02 2.880868e-02 2.997326e-02 3.104314e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#3.246034e-02 3.375462e-02 3.504868e-02 3.643723e-02 3.776591e-02 3.945486e-02 4.102636e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#4.268978e-02 4.458897e-02 4.511775e-02 4.651596e-02 4.721448e-02 4.810249e-02 4.931260e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#5.159862e-02 5.382562e-02 5.649603e-02 5.960483e-02 6.288563e-02 6.619324e-02 6.964801e-02 
+#84%          85%          86%          87%          88%          89%          90% 
+#7.261749e-02 7.513670e-02 7.939663e-02 8.460736e-02 8.988466e-02 9.410212e-02 1.007923e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.074183e-01 1.163221e-01 1.276862e-01 1.380258e-01 1.551593e-01 1.766730e-01 2.074289e-01 
+#98%          99%         100% 
+#2.571688e-01 4.463314e-01 1.395426e+01 
+shootCK2h <- rownames(shootCK2h[rowVars(shootCK2h)<0.3,])
+
+#CK5h
+shootCK5h <- expr.vst[,7:9]
+head(shootCK5h)
+quantile (rowVars(shootCK5h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0001205933 
+#7%           8%           9%          10%          11%          12%          13% 
+#0.0003219808 0.0005234780 0.0006861209 0.0008867834 0.0010994025 0.0013178629 0.0015570428 
+#14%          15%          16%          17%          18%          19%          20% 
+#0.0017910440 0.0020281526 0.0022543738 0.0025067083 0.0027515705 0.0029606460 0.0032344395 
+#21%          22%          23%          24%          25%          26%          27% 
+#0.0034841281 0.0037305026 0.0039911166 0.0042725197 0.0045602065 0.0048418457 0.0051345821 
+#28%          29%          30%          31%          32%          33%          34% 
+#0.0053983260 0.0056881376 0.0060117806 0.0062758805 0.0066072575 0.0069013627 0.0071963912 
+#35%          36%          37%          38%          39%          40%          41% 
+#0.0075614178 0.0079243908 0.0082898471 0.0086407971 0.0089874661 0.0093821480 0.0097819805 
+#42%          43%          44%          45%          46%          47%          48% 
+#0.0101755997 0.0105972194 0.0109860917 0.0114013488 0.0118537303 0.0123106052 0.0128451279 
+#49%          50%          51%          52%          53%          54%          55% 
+#0.0133621798 0.0138042402 0.0143353933 0.0148855957 0.0153647858 0.0160143283 0.0166332774 
+#56%          57%          58%          59%          60%          61%          62% 
+#0.0172935290 0.0179387496 0.0186119568 0.0193526213 0.0200246642 0.0207443579 0.0214273553 
+#63%          64%          65%          66%          67%          68%          69% 
+#0.0221653301 0.0230104555 0.0239639336 0.0248955613 0.0259098385 0.0270286134 0.0281772803 
+#70%          71%          72%          73%          74%          75%          76% 
+#0.0292715030 0.0304187583 0.0317293842 0.0327271441 0.0335897128 0.0347382590 0.0353815285 
+#77%          78%          79%          80%          81%          82%          83% 
+#0.0367598245 0.0384213748 0.0396759698 0.0413248498 0.0432044976 0.0445592221 0.0467775206 
+#84%          85%          86%          87%          88%          89%          90% 
+#0.0495761913 0.0525514482 0.0551706509 0.0583370337 0.0616985405 0.0652922812 0.0688774648 
+#91%          92%          93%          94%          95%          96%          97% 
+#0.0738010066 0.0797129018 0.0866448293 0.0956118722 0.1048610516 0.1204890413 0.1379737122 
+#98%          99%         100% 
+#0.1737143905 0.2665532286 8.3011266671 
+shootCK5h <- rownames(shootCK5h[rowVars(shootCK5h)<0.3,])
+
+shootCK10h <- expr.vst[,10:12]
+head(shootCK10h)
+quantile (rowVars(shootCK10h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0001253950 
+#7%           8%           9%          10%          11%          12%          13% 
+#0.0003272390 0.0005478545 0.0008145289 0.0011042533 0.0013590013 0.0016039257 0.0018784034 
+#14%          15%          16%          17%          18%          19%          20% 
+#0.0021465604 0.0023834973 0.0026488106 0.0029078967 0.0031691149 0.0034392091 0.0037443919 
+#21%          22%          23%          24%          25%          26%          27% 
+#0.0040019144 0.0043012879 0.0045895859 0.0049172251 0.0052408818 0.0055642094 0.0058472455 
+#28%          29%          30%          31%          32%          33%          34% 
+#0.0061886716 0.0064912270 0.0068648125 0.0072452462 0.0076764740 0.0080436259 0.0084192958 
+#35%          36%          37%          38%          39%          40%          41% 
+#0.0088295632 0.0091561948 0.0095652037 0.0100137010 0.0104095679 0.0108899504 0.0113822463 
+#42%          43%          44%          45%          46%          47%          48% 
+#0.0118428129 0.0123085172 0.0127311942 0.0132452853 0.0138036718 0.0143429125 0.0148526899 
+#49%          50%          51%          52%          53%          54%          55% 
+#0.0154428012 0.0159938362 0.0165005484 0.0170794305 0.0177358528 0.0183726484 0.0189973578 
+#56%          57%          58%          59%          60%          61%          62% 
+#0.0196621818 0.0203170438 0.0210552540 0.0219430741 0.0226914778 0.0234602699 0.0242524136 
+#63%          64%          65%          66%          67%          68%          69% 
+#0.0251248572 0.0261385138 0.0271783036 0.0280888273 0.0290020417 0.0300532982 0.0312039562 
+#70%          71%          72%          73%          74%          75%          76% 
+#0.0323310884 0.0336750074 0.0348258744 0.0361249866 0.0365581328 0.0375246374 0.0381522372 
+#77%          78%          79%          80%          81%          82%          83% 
+#0.0398988882 0.0407401441 0.0425902561 0.0434237768 0.0451391785 0.0472028583 0.0493338042 
+#84%          85%          86%          87%          88%          89%          90% 
+#0.0521095397 0.0547865944 0.0575541400 0.0597625429 0.0628681181 0.0666114454 0.0705971817 
+#91%          92%          93%          94%          95%          96%          97% 
+#0.0746139914 0.0798493644 0.0853952956 0.0921745461 0.1011239406 0.1113460416 0.1278860463 
+#98%          99%         100% 
+#0.1533541853 0.2151596856 9.9816405922 
+shootCK10h <- rownames(shootCK10h[rowVars(shootCK10h)<0.3,])
+#CK24h
+shootCK24h <- expr.vst[,13:15]
+head(shootCK24h)
+quantile (rowVars(shootCK24h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 3.708369e-05 
+#7%           8%           9%          10%          11%          12%          13% 
+#2.410585e-04 4.562302e-04 6.651587e-04 9.122268e-04 1.155828e-03 1.403195e-03 1.668643e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#1.940908e-03 2.219769e-03 2.474279e-03 2.775569e-03 3.079182e-03 3.370285e-03 3.666678e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#4.002670e-03 4.352772e-03 4.730081e-03 5.076857e-03 5.381531e-03 5.744671e-03 6.133276e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#6.468295e-03 6.839289e-03 7.164709e-03 7.531290e-03 7.981050e-03 8.405837e-03 8.872972e-03 
+#35%          36%          37%          38%          39%          40%          41% 
+#9.316722e-03 9.770187e-03 1.025346e-02 1.078216e-02 1.126730e-02 1.174600e-02 1.235860e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#1.283463e-02 1.347803e-02 1.404729e-02 1.462373e-02 1.525148e-02 1.582479e-02 1.649321e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#1.718568e-02 1.792421e-02 1.858408e-02 1.935720e-02 2.015646e-02 2.109009e-02 2.188701e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#2.255458e-02 2.348768e-02 2.446605e-02 2.541086e-02 2.658872e-02 2.769998e-02 2.881199e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#2.987259e-02 3.108930e-02 3.242169e-02 3.394364e-02 3.529072e-02 3.688067e-02 3.861798e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#4.040016e-02 4.092174e-02 4.225553e-02 4.354847e-02 4.480871e-02 4.603662e-02 4.804609e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#4.928154e-02 5.163699e-02 5.446722e-02 5.746412e-02 6.054332e-02 6.399231e-02 6.706006e-02 
+#84%          85%          86%          87%          88%          89%          90% 
+#6.986148e-02 7.391017e-02 7.813129e-02 8.195681e-02 8.664791e-02 9.236700e-02 9.757464e-02 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.055889e-01 1.145303e-01 1.254296e-01 1.369857e-01 1.532995e-01 1.804284e-01 2.133595e-01 
+#98%          99%         100% 
+#2.820180e-01 4.277909e-01 5.937558e+00
+shootCK24h <- rownames(shootCK24h[rowVars(shootCK24h)<0.3,])
+#salt
+shootsalt1h <- expr.vst[,16:18]
+head(shootsalt1h)
+quantile (rowVars(shootsalt1h),probs=seq(0,1,0.01))
+shootsalt1h <- rownames(shootsalt1h[rowVars(shootsalt1h)<0.3,])
+#0%           1%           2%           3%           4%           5%           6% 
+#0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0002117453 
+#7%           8%           9%          10%          11%          12%          13% 
+#0.0005171834 0.0008766427 0.0012033716 0.0015636567 0.0019003887 0.0022648985 0.0026566580 
+#14%          15%          16%          17%          18%          19%          20% 
+#0.0030528855 0.0034445701 0.0038046644 0.0042456426 0.0046956681 0.0051298577 0.0055515904 
+#21%          22%          23%          24%          25%          26%          27% 
+#0.0060288792 0.0065234500 0.0069791628 0.0074280094 0.0078713843 0.0084306644 0.0089443469 
+#28%          29%          30%          31%          32%          33%          34% 
+#0.0093764184 0.0098415389 0.0104905134 0.0109885017 0.0115609766 0.0121856271 0.0128810561 
+#35%          36%          37%          38%          39%          40%          41% 
+#0.0135559291 0.0142038636 0.0148396496 0.0155372616 0.0163282337 0.0170615707 0.0177972930 
+#42%          43%          44%          45%          46%          47%          48% 
+#0.0185404814 0.0194838998 0.0203957394 0.0212359799 0.0222159622 0.0231390266 0.0241067783 
+#49%          50%          51%          52%          53%          54%          55% 
+#0.0249807755 0.0261509342 0.0272694563 0.0282810540 0.0294844491 0.0307269706 0.0319102028 
+#56%          57%          58%          59%          60%          61%          62% 
+#0.0331765873 0.0344126408 0.0359059980 0.0374327776 0.0388770387 0.0405507462 0.0423041619 
+#63%          64%          65%          66%          67%          68%          69% 
+#0.0442900196 0.0461724618 0.0481279115 0.0498449442 0.0510105165 0.0522420700 0.0533214874 
+#70%          71%          72%          73%          74%          75%          76% 
+#0.0545338262 0.0557097975 0.0584765944 0.0616209688 0.0645118230 0.0672935445 0.0705387633 
+#77%          78%          79%          80%          81%          82%          83% 
+#0.0739849714 0.0780309441 0.0806991736 0.0844600690 0.0887521039 0.0938028684 0.0991110098 
+#84%          85%          86%          87%          88%          89%          90% 
+#0.1046412035 0.1096566582 0.1155704516 0.1225887298 0.1312808691 0.1423845468 0.1528120257 
+#91%          92%          93%          94%          95%          96%          97% 
+#0.1634817077 0.1822816007 0.2047753980 0.2326822535 0.2713598165 0.3196610805 0.4041785139 
+#98%          99%         100% 
+#0.5637174878 0.9623317546 6.6968549551 
+shootsalt2h <- expr.vst[,19:21]
+head(shootsalt2h)
+quantile (rowVars(shootsalt2h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 2.289361e-04 
+#7%           8%           9%          10%          11%          12%          13% 
+#5.566201e-04 8.704362e-04 1.208748e-03 1.558764e-03 1.904807e-03 2.268349e-03 2.604837e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#3.018899e-03 3.422794e-03 3.853237e-03 4.264325e-03 4.732990e-03 5.163259e-03 5.636320e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#6.115298e-03 6.556986e-03 7.002485e-03 7.516501e-03 8.012285e-03 8.459667e-03 9.018319e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#9.574870e-03 1.014060e-02 1.061167e-02 1.123004e-02 1.185305e-02 1.249421e-02 1.324433e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.396765e-02 1.456743e-02 1.529241e-02 1.584007e-02 1.657429e-02 1.733785e-02 1.799595e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#1.881671e-02 1.964050e-02 2.053397e-02 2.137555e-02 2.232115e-02 2.329225e-02 2.422883e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#2.517974e-02 2.641368e-02 2.747338e-02 2.867139e-02 2.968830e-02 3.072646e-02 3.184591e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#3.321253e-02 3.458534e-02 3.581936e-02 3.733060e-02 3.909508e-02 4.001986e-02 4.138323e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#4.304221e-02 4.481122e-02 4.614004e-02 4.813826e-02 5.014932e-02 5.080050e-02 5.287587e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#5.535735e-02 5.763599e-02 5.963216e-02 6.178307e-02 6.471065e-02 6.771308e-02 7.065861e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#7.375473e-02 7.733130e-02 7.993717e-02 8.417413e-02 8.960320e-02 9.364260e-02 9.936377e-02 
+#84%          85%          86%          87%          88%          89%          90% 
+#1.045002e-01 1.109582e-01 1.182548e-01 1.228800e-01 1.330333e-01 1.438738e-01 1.541434e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.672882e-01 1.855993e-01 2.034365e-01 2.305886e-01 2.642044e-01 3.136663e-01 3.981328e-01 
+#98%          99%         100% 
+#5.670848e-01 9.865442e-01 1.309449e+01 
+shootsalt2h <- rownames(shootsalt2h[rowVars(shootsalt2h)<0.3,])
+
+shootsalt5h <- expr.vst[,22:24]
+head(shootsalt5h)
+quantile (rowVars(shootsalt5h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 3.354266e-04 
+#7%           8%           9%          10%          11%          12%          13% 
+#6.717822e-04 1.052565e-03 1.407897e-03 1.795562e-03 2.293654e-03 2.710187e-03 3.158803e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#3.595048e-03 3.969764e-03 4.319492e-03 4.767852e-03 5.183030e-03 5.677188e-03 6.127945e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#6.605557e-03 7.054068e-03 7.563004e-03 8.153972e-03 8.654915e-03 9.177082e-03 9.678840e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#1.026036e-02 1.081943e-02 1.140227e-02 1.193964e-02 1.257283e-02 1.319435e-02 1.375547e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.438147e-02 1.505222e-02 1.569818e-02 1.638306e-02 1.712744e-02 1.780145e-02 1.864667e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#1.940463e-02 2.009330e-02 2.074817e-02 2.160211e-02 2.251482e-02 2.340800e-02 2.435577e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#2.519637e-02 2.618864e-02 2.721758e-02 2.821812e-02 2.938732e-02 3.048584e-02 3.164648e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#3.297149e-02 3.409140e-02 3.564192e-02 3.678834e-02 3.767996e-02 3.860483e-02 4.012679e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#4.065413e-02 4.209827e-02 4.332310e-02 4.480948e-02 4.663961e-02 4.767370e-02 4.942671e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#5.140726e-02 5.366163e-02 5.615785e-02 5.836611e-02 6.053686e-02 6.289271e-02 6.571399e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#6.836942e-02 7.176470e-02 7.443769e-02 7.800159e-02 8.136736e-02 8.519536e-02 8.989092e-02 
+#84%          85%          86%          87%          88%          89%          90% 
+#9.377827e-02 9.912966e-02 1.051165e-01 1.111436e-01 1.193196e-01 1.262362e-01 1.357334e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.459571e-01 1.590785e-01 1.752086e-01 1.923559e-01 2.145529e-01 2.459566e-01 2.960812e-01 
+#98%          99%         100% 
+#3.740041e-01 5.700483e-01 1.048167e+01
+shootsalt5h <- rownames(shootsalt5h[rowVars(shootsalt5h)<0.3,])
+shootsalt10h <- expr.vst[,25:27]
+head(shootsalt10h)
+quantile (rowVars(shootsalt10h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 2.392884e-04 
+#7%           8%           9%          10%          11%          12%          13% 
+#5.593329e-04 8.292236e-04 1.112508e-03 1.452782e-03 1.816866e-03 2.131735e-03 2.443889e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#2.740020e-03 3.043854e-03 3.380422e-03 3.709573e-03 4.089023e-03 4.382393e-03 4.741133e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#5.129009e-03 5.508516e-03 5.952163e-03 6.329395e-03 6.723694e-03 7.155856e-03 7.546212e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#7.967315e-03 8.373507e-03 8.844300e-03 9.253889e-03 9.740357e-03 1.015395e-02 1.056407e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.104784e-02 1.158254e-02 1.206044e-02 1.253835e-02 1.305780e-02 1.372604e-02 1.429744e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#1.489712e-02 1.551599e-02 1.614028e-02 1.679223e-02 1.746541e-02 1.819179e-02 1.881669e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#1.957716e-02 2.036584e-02 2.118636e-02 2.203314e-02 2.291225e-02 2.376722e-02 2.461357e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#2.552584e-02 2.649618e-02 2.743175e-02 2.849636e-02 2.943470e-02 3.059852e-02 3.165585e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#3.285819e-02 3.394250e-02 3.450624e-02 3.600056e-02 3.729685e-02 3.861963e-02 3.969651e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#4.118798e-02 4.276840e-02 4.377345e-02 4.471000e-02 4.611824e-02 4.796705e-02 5.004724e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#5.215420e-02 5.481608e-02 5.726549e-02 5.963719e-02 6.255395e-02 6.557180e-02 6.794324e-02 
+#84%          85%          86%          87%          88%          89%          90% 
+#7.057304e-02 7.461477e-02 7.841555e-02 8.209910e-02 8.714322e-02 9.235182e-02 9.931575e-02 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.054069e-01 1.138615e-01 1.246654e-01 1.345593e-01 1.497335e-01 1.722552e-01 2.065456e-01 
+#98%          99%         100% 
+#2.598491e-01 4.013689e-01 1.739037e+01 
+shootsalt10h <- rownames(shootsalt10h[rowVars(shootsalt10h)<0.3,])
+
+shootsalt24h <- expr.vst[,28:29]
+head(shootsalt24h)
+quantile (rowVars(shootsalt24h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 
+#7%           8%           9%          10%          11%          12%          13% 
+#7.599068e-06 4.595173e-05 1.177581e-04 2.265585e-04 3.432677e-04 4.200591e-04 5.803220e-04 
+#14%          15%          16%          17%          18%          19%          20% 
+#8.191035e-04 9.501040e-04 1.222008e-03 1.515032e-03 1.831032e-03 2.164935e-03 2.428784e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#2.835570e-03 3.310503e-03 3.875742e-03 4.452355e-03 4.947936e-03 5.597113e-03 6.339444e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#6.743695e-03 7.425953e-03 8.286363e-03 9.203257e-03 9.798889e-03 1.054518e-02 1.135040e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.231028e-02 1.294146e-02 1.408960e-02 1.529359e-02 1.685521e-02 1.769089e-02 1.874106e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#1.998892e-02 2.149846e-02 2.271387e-02 2.411136e-02 2.508799e-02 2.691316e-02 2.858849e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#2.979368e-02 3.177038e-02 3.341092e-02 3.519418e-02 3.762260e-02 3.960633e-02 4.186606e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#4.435536e-02 4.620594e-02 4.827864e-02 5.011153e-02 5.255119e-02 5.494184e-02 5.779071e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#6.051925e-02 6.051925e-02 6.341426e-02 6.733889e-02 7.076215e-02 7.137192e-02 7.448994e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#7.793795e-02 8.200291e-02 8.657047e-02 9.144664e-02 9.535040e-02 1.010310e-01 1.074128e-01 
+#77%          78%          79%          80%          81%          82%          83% 
+#1.128463e-01 1.184505e-01 1.215594e-01 1.291632e-01 1.363204e-01 1.412847e-01 1.505008e-01 
+#84%          85%          86%          87%          88%          89%          90% 
+#1.595887e-01 1.694855e-01 1.798347e-01 1.890618e-01 2.034053e-01 2.156922e-01 2.349537e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#2.516395e-01 2.746224e-01 2.978457e-01 3.290107e-01 3.647145e-01 4.193785e-01 4.998434e-01 
+#98%          99%         100% 
+#6.191232e-01 8.892492e-01 1.431832e+01 
+shootsalt24h <- rownames(shootsalt24h[rowVars(shootsalt24h)<0.3,])
+
+shootdrought1h <- expr.vst[,30:32]
+head(shootdrought1h)
+quantile (rowVars(shootdrought1h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 7.771932e-06 2.220416e-04 
+#7%           8%           9%          10%          11%          12%          13% 
+#5.146159e-04 8.125477e-04 1.115532e-03 1.453648e-03 1.785780e-03 2.092170e-03 2.424119e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#2.794850e-03 3.152142e-03 3.508072e-03 3.833740e-03 4.215486e-03 4.567951e-03 4.949831e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#5.336703e-03 5.720046e-03 6.167773e-03 6.611235e-03 7.039031e-03 7.480162e-03 7.949905e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#8.368741e-03 8.750843e-03 9.153775e-03 9.541136e-03 1.001083e-02 1.053304e-02 1.109037e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.162848e-02 1.217651e-02 1.276961e-02 1.337454e-02 1.395392e-02 1.460793e-02 1.524838e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#1.596441e-02 1.677499e-02 1.752625e-02 1.825182e-02 1.897111e-02 1.972867e-02 2.054204e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#2.127348e-02 2.202927e-02 2.288479e-02 2.390045e-02 2.476571e-02 2.583626e-02 2.673141e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#2.780629e-02 2.883381e-02 2.992028e-02 3.108844e-02 3.238008e-02 3.354855e-02 3.484964e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#3.638160e-02 3.778780e-02 3.922191e-02 4.061217e-02 4.230119e-02 4.389427e-02 4.587826e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#4.793955e-02 4.992111e-02 5.194069e-02 5.249948e-02 5.305238e-02 5.333811e-02 5.536593e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#5.767486e-02 6.053876e-02 6.330470e-02 6.656956e-02 7.033557e-02 7.373876e-02 7.748218e-02 
+#84%          85%          86%          87%          88%          89%          90% 
+#8.143948e-02 8.390296e-02 8.868485e-02 9.426595e-02 1.003356e-01 1.054405e-01 1.106502e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.186275e-01 1.272511e-01 1.389383e-01 1.539295e-01 1.662513e-01 1.947796e-01 2.256245e-01 
+#98%          99%         100% 
+#2.756984e-01 4.574342e-01 1.283102e+01 
+shootdrought1h <- rownames(shootdrought1h[rowVars(shootdrought1h)<0.3,])
+
+shootdrought2h <- expr.vst[,33:35]
+head(shootdrought2h)
+quantile (rowVars(shootdrought2h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 4.298180e-07 4.576198e-04 9.602210e-04 
+#7%           8%           9%          10%          11%          12%          13% 
+#1.389355e-03 1.814990e-03 2.338964e-03 2.821557e-03 3.411717e-03 3.831003e-03 4.342307e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#4.891423e-03 5.302804e-03 6.031420e-03 6.650554e-03 7.229126e-03 7.881282e-03 8.515771e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#9.200031e-03 9.785427e-03 1.047097e-02 1.126772e-02 1.204154e-02 1.260655e-02 1.339650e-02 
+#28%          29%          30%          31%          32%          33%          34% 
+#1.421980e-02 1.500364e-02 1.579401e-02 1.668300e-02 1.758616e-02 1.826970e-02 1.910308e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#2.012770e-02 2.089384e-02 2.183895e-02 2.278378e-02 2.376427e-02 2.486042e-02 2.587713e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#2.704598e-02 2.822758e-02 2.955759e-02 3.072861e-02 3.196680e-02 3.328746e-02 3.456624e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#3.590065e-02 3.711240e-02 3.874718e-02 4.036820e-02 4.149517e-02 4.155050e-02 4.289156e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#4.458873e-02 4.637515e-02 4.820172e-02 4.994592e-02 5.125598e-02 5.323592e-02 5.525660e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#5.752238e-02 5.887891e-02 6.149260e-02 6.407961e-02 6.603575e-02 6.858748e-02 7.147932e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#7.448095e-02 7.767478e-02 8.122743e-02 8.269196e-02 8.676641e-02 9.005550e-02 9.369256e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#9.713043e-02 1.011825e-01 1.065428e-01 1.125754e-01 1.179109e-01 1.232990e-01 1.290457e-01 
+#84%          85%          86%          87%          88%          89%          90% 
+#1.380816e-01 1.469513e-01 1.558724e-01 1.657260e-01 1.775497e-01 1.900666e-01 2.076220e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#2.267366e-01 2.539280e-01 2.824735e-01 3.204875e-01 3.647994e-01 4.345282e-01 5.364852e-01 
+#98%          99%         100% 
+#6.912738e-01 1.024378e+00 1.051320e+01 
+shootdrought2h <- rownames(shootdrought2h[rowVars(shootdrought2h)<0.3,])
+
+shootdrought5h <- expr.vst[,36:38]
+head(shootdrought5h)
+quantile (rowVars(shootdrought5h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 9.039291e-05 7.240090e-04 
+#7%           8%           9%          10%          11%          12%          13% 
+#1.407596e-03 1.965680e-03 2.682223e-03 3.305179e-03 3.974802e-03 4.724527e-03 5.299705e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#6.010853e-03 6.799753e-03 7.497529e-03 8.262736e-03 9.218625e-03 9.968210e-03 1.080857e-02 
+#21%          22%          23%          24%          25%          26%          27% 
+#1.168714e-02 1.264029e-02 1.358853e-02 1.448025e-02 1.540356e-02 1.634076e-02 1.746863e-02 
+#28%          29%          30%          31%          32%          33%          34% 
+#1.830899e-02 1.941512e-02 2.061170e-02 2.167609e-02 2.261811e-02 2.396396e-02 2.521125e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#2.658729e-02 2.788474e-02 2.926721e-02 3.069710e-02 3.215634e-02 3.358368e-02 3.493801e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#3.675126e-02 3.843895e-02 4.023007e-02 4.187719e-02 4.344725e-02 4.542294e-02 4.640125e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#4.792899e-02 4.933198e-02 4.979621e-02 5.177777e-02 5.368069e-02 5.586933e-02 5.794842e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#5.919717e-02 6.142452e-02 6.364800e-02 6.601104e-02 6.752083e-02 6.977676e-02 7.282695e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#7.548552e-02 7.815704e-02 8.124942e-02 8.439092e-02 8.756486e-02 9.122103e-02 9.346631e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#9.704847e-02 1.000736e-01 1.034372e-01 1.075279e-01 1.109700e-01 1.150677e-01 1.198360e-01 
+#77%          78%          79%          80%          81%          82%          83% 
+#1.251344e-01 1.304504e-01 1.358426e-01 1.409756e-01 1.467001e-01 1.528020e-01 1.601649e-01 
+#84%          85%          86%          87%          88%          89%          90% 
+#1.680282e-01 1.752131e-01 1.842642e-01 1.946299e-01 2.038426e-01 2.171026e-01 2.318218e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#2.480304e-01 2.684532e-01 2.902020e-01 3.171639e-01 3.514237e-01 4.057868e-01 4.756955e-01 
+#98%          99%         100% 
+#5.892575e-01 8.469298e-01 7.825201e+00 
+shootdrought5h <- rownames(shootdrought5h[rowVars(shootdrought5h)<0.3,])
+
+shootdrought10h <- expr.vst[,39:41]
+head(shootdrought10h)
+quantile (rowVars(shootdrought10h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 2.197725e-04 6.548164e-04 
+#7%           8%           9%          10%          11%          12%          13% 
+#1.203746e-03 1.716377e-03 2.343910e-03 2.895967e-03 3.503918e-03 4.123694e-03 4.895150e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#5.422144e-03 6.027991e-03 6.662930e-03 7.245873e-03 7.861080e-03 8.439448e-03 9.048846e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#9.658439e-03 1.032150e-02 1.098582e-02 1.176227e-02 1.254409e-02 1.336954e-02 1.404530e-02 
+#28%          29%          30%          31%          32%          33%          34% 
+#1.481403e-02 1.556513e-02 1.641526e-02 1.744504e-02 1.826180e-02 1.907978e-02 2.000730e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#2.089448e-02 2.186166e-02 2.289492e-02 2.383185e-02 2.483315e-02 2.576840e-02 2.672167e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#2.760332e-02 2.872387e-02 2.983767e-02 3.095014e-02 3.216839e-02 3.338100e-02 3.480235e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#3.602413e-02 3.732815e-02 3.873541e-02 4.002080e-02 4.138149e-02 4.268698e-02 4.425748e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#4.591862e-02 4.791244e-02 4.964726e-02 5.131455e-02 5.314832e-02 5.483980e-02 5.702701e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#5.868121e-02 6.036913e-02 6.139964e-02 6.241313e-02 6.385035e-02 6.579489e-02 6.746268e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#6.988131e-02 7.091059e-02 7.346068e-02 7.596662e-02 7.914274e-02 8.217527e-02 8.563748e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#8.930788e-02 9.311872e-02 9.644473e-02 9.917259e-02 1.035135e-01 1.076915e-01 1.119762e-01 
+#84%          85%          86%          87%          88%          89%          90% 
+#1.177948e-01 1.221284e-01 1.279438e-01 1.354069e-01 1.402745e-01 1.495124e-01 1.592427e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.697650e-01 1.806215e-01 1.929986e-01 2.080644e-01 2.298516e-01 2.596768e-01 3.013145e-01 
+#98%          99%         100% 
+#3.709051e-01 5.609631e-01 1.435488e+01 
+shootdrought10h <- rownames(shootdrought10h[rowVars(shootdrought10h)<0.3,])
+
+shootdrought24h <- expr.vst[,42:44]
+head(shootdrought24h)
+quantile (rowVars(shootdrought24h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 6.132878e-06 
+#7%           8%           9%          10%          11%          12%          13% 
+#3.955749e-04 8.827386e-04 1.402106e-03 1.905281e-03 2.391178e-03 2.964001e-03 3.494954e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#4.003078e-03 4.652365e-03 5.176982e-03 5.717752e-03 6.289186e-03 6.908909e-03 7.576663e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#8.143924e-03 8.761808e-03 9.281615e-03 1.002559e-02 1.077560e-02 1.145504e-02 1.216050e-02 
+#28%          29%          30%          31%          32%          33%          34% 
+#1.294535e-02 1.375898e-02 1.453400e-02 1.507669e-02 1.557970e-02 1.644759e-02 1.740640e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.831246e-02 1.928168e-02 2.016784e-02 2.100149e-02 2.186072e-02 2.274094e-02 2.381945e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#2.486046e-02 2.594246e-02 2.705076e-02 2.814365e-02 2.942805e-02 3.046641e-02 3.186191e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#3.314977e-02 3.427621e-02 3.544185e-02 3.652479e-02 3.802039e-02 3.973322e-02 4.140297e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#4.291422e-02 4.436995e-02 4.583356e-02 4.705973e-02 4.901057e-02 5.106045e-02 5.336920e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#5.510917e-02 5.754649e-02 6.017408e-02 6.339050e-02 6.566013e-02 6.823194e-02 7.101450e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#7.438579e-02 7.773647e-02 8.168379e-02 8.538674e-02 8.953168e-02 9.046358e-02 9.101314e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#9.151286e-02 9.155941e-02 9.411013e-02 9.835065e-02 1.026986e-01 1.092127e-01 1.163719e-01 
+#84%          85%          86%          87%          88%          89%          90% 
+#1.239398e-01 1.313987e-01 1.407426e-01 1.436096e-01 1.527337e-01 1.660154e-01 1.790190e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.811649e-01 2.007715e-01 2.090124e-01 2.293219e-01 2.631215e-01 2.817434e-01 3.314291e-01 
+#98%          99%         100% 
+#3.954712e-01 5.254923e-01 1.351582e+01 
+shootdrought24h <- rownames(shootdrought24h[rowVars(shootdrought24h)<0.3,])
+
+shootheat1h <- expr.vst[,45:47]
+head(shootheat1h)
+quantile (rowVars(shootheat1h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 
+#7%           8%           9%          10%          11%          12%          13% 
+#2.550669e-04 5.964905e-04 9.103809e-04 1.218046e-03 1.604026e-03 1.966900e-03 2.390933e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#2.801342e-03 3.255198e-03 3.724936e-03 4.131937e-03 4.540924e-03 5.002142e-03 5.426652e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#5.714246e-03 6.155258e-03 6.716912e-03 7.285768e-03 7.808819e-03 8.398954e-03 8.961067e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#9.569762e-03 1.021426e-02 1.065944e-02 1.117371e-02 1.182791e-02 1.256725e-02 1.319380e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.397525e-02 1.465617e-02 1.535910e-02 1.613100e-02 1.692564e-02 1.754582e-02 1.831892e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#1.926251e-02 2.018322e-02 2.105016e-02 2.208739e-02 2.303971e-02 2.399518e-02 2.505674e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#2.614544e-02 2.731049e-02 2.823684e-02 2.926438e-02 3.047484e-02 3.184871e-02 3.320331e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#3.454619e-02 3.575814e-02 3.730922e-02 3.901268e-02 4.034725e-02 4.209430e-02 4.391574e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#4.568621e-02 4.777699e-02 4.977966e-02 5.203186e-02 5.300958e-02 5.380007e-02 5.628785e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#5.749335e-02 5.969958e-02 6.092869e-02 6.363006e-02 6.695512e-02 7.031820e-02 7.396190e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#7.732380e-02 8.004224e-02 8.418345e-02 8.760132e-02 9.203361e-02 9.607772e-02 9.939994e-02 
+#84%          85%          86%          87%          88%          89%          90% 
+#1.053559e-01 1.085966e-01 1.158066e-01 1.216309e-01 1.299164e-01 1.391602e-01 1.482096e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.579938e-01 1.701000e-01 1.882927e-01 2.030191e-01 2.264059e-01 2.592465e-01 2.995675e-01 
+#98%          99%         100% 
+#3.657716e-01 5.073590e-01 1.110200e+01 
+shootheat1h <- rownames(shootheat1h[rowVars(shootheat1h)<0.3,])
+
+shootheat2h <- expr.vst[,48:50]
+head(shootheat2h)
+quantile (rowVars(shootheat2h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 6.847982e-05 
+#7%           8%           9%          10%          11%          12%          13% 
+#2.427958e-04 4.446659e-04 6.680041e-04 8.898830e-04 1.127848e-03 1.380770e-03 1.643899e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#1.902302e-03 2.150379e-03 2.388810e-03 2.640934e-03 2.921359e-03 3.198145e-03 3.462255e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#3.730583e-03 4.011500e-03 4.315816e-03 4.649369e-03 4.992283e-03 5.302123e-03 5.627606e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#5.959740e-03 6.271098e-03 6.543170e-03 6.908174e-03 7.283068e-03 7.643856e-03 7.977095e-03 
+#35%          36%          37%          38%          39%          40%          41% 
+#8.340829e-03 8.710985e-03 9.068028e-03 9.501690e-03 9.914957e-03 1.036170e-02 1.087118e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#1.135029e-02 1.188252e-02 1.243755e-02 1.288928e-02 1.336430e-02 1.390284e-02 1.449752e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#1.498437e-02 1.556251e-02 1.606635e-02 1.667127e-02 1.729747e-02 1.787989e-02 1.862719e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#1.939524e-02 2.014633e-02 2.090055e-02 2.173489e-02 2.268703e-02 2.371700e-02 2.467195e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#2.555828e-02 2.648517e-02 2.746278e-02 2.858696e-02 2.992781e-02 3.115656e-02 3.251704e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#3.392522e-02 3.517903e-02 3.667434e-02 3.807291e-02 3.887452e-02 3.965993e-02 4.056875e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#4.179782e-02 4.291945e-02 4.459501e-02 4.673350e-02 4.893748e-02 5.126116e-02 5.409361e-02 
+#84%          85%          86%          87%          88%          89%          90% 
+#5.751041e-02 6.063217e-02 6.350582e-02 6.715495e-02 7.220198e-02 7.580199e-02 8.034725e-02 
+#91%          92%          93%          94%          95%          96%          97% 
+#8.540267e-02 9.107670e-02 9.938186e-02 1.092087e-01 1.181718e-01 1.318375e-01 1.545737e-01 
+#98%          99%         100% 
+#1.862498e-01 2.789920e-01 9.273849e+00 
+shootheat2h <- rownames(shootheat2h[rowVars(shootheat2h)<0.3,])
+
+shootheat5h <- expr.vst[,51:53]
+head(shootheat5h)
+quantile (rowVars(shootheat5h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 3.589093e-04 
+#7%           8%           9%          10%          11%          12%          13% 
+#8.069308e-04 1.314252e-03 1.825424e-03 2.380459e-03 2.863414e-03 3.459066e-03 4.066350e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#4.576223e-03 5.079473e-03 5.693705e-03 6.312042e-03 6.982992e-03 7.590265e-03 8.326681e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#8.914410e-03 9.617179e-03 1.038789e-02 1.110678e-02 1.181434e-02 1.246035e-02 1.314856e-02 
+#28%          29%          30%          31%          32%          33%          34% 
+#1.401154e-02 1.493553e-02 1.586353e-02 1.662061e-02 1.745542e-02 1.835503e-02 1.927836e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#2.024758e-02 2.128354e-02 2.236922e-02 2.342054e-02 2.444627e-02 2.555629e-02 2.641476e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#2.707832e-02 2.822104e-02 2.933075e-02 3.050074e-02 3.183336e-02 3.327489e-02 3.462117e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#3.570513e-02 3.716999e-02 3.872586e-02 3.982211e-02 4.151027e-02 4.226410e-02 4.381844e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#4.533536e-02 4.698980e-02 4.787607e-02 4.973520e-02 5.175678e-02 5.322695e-02 5.540185e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#5.790790e-02 6.036115e-02 6.267798e-02 6.499420e-02 6.757192e-02 6.978384e-02 7.240263e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#7.530626e-02 7.849302e-02 8.117812e-02 8.360278e-02 8.751452e-02 9.142095e-02 9.518833e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#9.856098e-02 1.031410e-01 1.077590e-01 1.126263e-01 1.185749e-01 1.244151e-01 1.312753e-01 
+#84%          85%          86%          87%          88%          89%          90% 
+#1.390291e-01 1.468185e-01 1.553917e-01 1.646263e-01 1.761217e-01 1.874566e-01 2.038431e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#2.204366e-01 2.424347e-01 2.694059e-01 3.023547e-01 3.485849e-01 4.177551e-01 5.194733e-01 
+#98%          99%         100% 
+#7.163927e-01 1.155230e+00 1.321037e+01 
+shootheat5h <- rownames(shootheat5h[rowVars(shootheat5h)<0.3,])
+
+shootheat10h <- expr.vst[,54:56]
+head(shootheat10h)
+quantile (rowVars(shootheat10h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 7.012087e-05 6.763652e-04 1.305563e-03 
+#7%           8%           9%          10%          11%          12%          13% 
+#1.861850e-03 2.476298e-03 3.017433e-03 3.710239e-03 4.328140e-03 5.065748e-03 5.695259e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#6.380314e-03 7.071663e-03 7.845331e-03 8.581074e-03 9.360150e-03 1.022497e-02 1.105128e-02 
+#21%          22%          23%          24%          25%          26%          27% 
+#1.184500e-02 1.269246e-02 1.356080e-02 1.450464e-02 1.549577e-02 1.645702e-02 1.751087e-02 
+#28%          29%          30%          31%          32%          33%          34% 
+#1.853866e-02 1.978393e-02 2.097989e-02 2.150635e-02 2.230698e-02 2.346626e-02 2.472457e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#2.588813e-02 2.715403e-02 2.855802e-02 2.977123e-02 3.136311e-02 3.298058e-02 3.438952e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#3.589667e-02 3.684379e-02 3.866369e-02 4.007146e-02 4.213186e-02 4.290239e-02 4.448208e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#4.654113e-02 4.858034e-02 5.094295e-02 5.326465e-02 5.531706e-02 5.797855e-02 6.015569e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#6.269020e-02 6.459143e-02 6.702877e-02 7.037357e-02 7.348190e-02 7.689270e-02 8.073680e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#8.377511e-02 8.730523e-02 9.102191e-02 9.521991e-02 9.887646e-02 1.036675e-01 1.079388e-01 
+#70%          71%          72%          73%          74%          75%          76% 
+#1.124297e-01 1.180026e-01 1.243853e-01 1.297131e-01 1.365364e-01 1.427498e-01 1.497522e-01 
+#77%          78%          79%          80%          81%          82%          83% 
+#1.576408e-01 1.667999e-01 1.756580e-01 1.866375e-01 1.971518e-01 2.093341e-01 2.231791e-01 
+#84%          85%          86%          87%          88%          89%          90% 
+#2.378506e-01 2.535145e-01 2.734146e-01 2.948902e-01 3.204945e-01 3.492395e-01 3.796555e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#4.181459e-01 4.609868e-01 5.151874e-01 5.852504e-01 6.804082e-01 8.034807e-01 1.012317e+00 
+#98%          99%         100% 
+#1.387627e+00 2.169454e+00 1.362999e+01 
+shootheat10h <- rownames(shootheat10h[rowVars(shootheat10h)<0.3,])
+
+shootheat24h <- expr.vst[,57:59]
+head(shootheat24h)
+quantile (rowVars(shootheat24h),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 1.471626e-04 8.508892e-04 1.559966e-03 
+#7%           8%           9%          10%          11%          12%          13% 
+#2.160359e-03 2.933126e-03 3.750066e-03 4.511196e-03 5.347003e-03 6.103797e-03 6.881377e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#7.665029e-03 8.444175e-03 9.333873e-03 1.019976e-02 1.105309e-02 1.205451e-02 1.306966e-02 
+#21%          22%          23%          24%          25%          26%          27% 
+#1.393958e-02 1.495685e-02 1.588537e-02 1.694854e-02 1.799826e-02 1.899759e-02 2.012056e-02 
+#28%          29%          30%          31%          32%          33%          34% 
+#2.139884e-02 2.238546e-02 2.350275e-02 2.469317e-02 2.586573e-02 2.716740e-02 2.808335e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#2.930236e-02 3.084654e-02 3.218635e-02 3.374905e-02 3.479067e-02 3.535111e-02 3.673125e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#3.822310e-02 4.019909e-02 4.203759e-02 4.388122e-02 4.549702e-02 4.687909e-02 4.860211e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#5.071485e-02 5.274731e-02 5.457878e-02 5.637543e-02 5.860443e-02 6.103978e-02 6.318261e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#6.561353e-02 6.843226e-02 7.003837e-02 7.269156e-02 7.550198e-02 7.837597e-02 8.150180e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#8.430626e-02 8.749003e-02 9.134627e-02 9.535787e-02 9.967099e-02 1.035154e-01 1.071579e-01 
+#70%          71%          72%          73%          74%          75%          76% 
+#1.118920e-01 1.164973e-01 1.223139e-01 1.286537e-01 1.346299e-01 1.397011e-01 1.468470e-01 
+#77%          78%          79%          80%          81%          82%          83% 
+#1.535349e-01 1.613635e-01 1.691327e-01 1.777111e-01 1.878305e-01 2.005490e-01 2.114250e-01 
+#84%          85%          86%          87%          88%          89%          90% 
+#2.268827e-01 2.394376e-01 2.566972e-01 2.770378e-01 2.996779e-01 3.241612e-01 3.555099e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#3.898636e-01 4.298309e-01 4.876381e-01 5.490988e-01 6.309337e-01 7.465053e-01 9.328499e-01 
+#98%          99%         100% 
+#1.213070e+00 1.857621e+00 1.761441e+01 
+shootheat24h <- rownames(shootheat24h[rowVars(shootheat24h)<0.3,])
+CL <- expr.vst[,60:62]
+head(CL)
+quantile (rowVars(CL),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0000000000 0.0003317996 0.0008426666 
+#7%           8%           9%          10%          11%          12%          13% 
+#0.0014852981 0.0020994002 0.0026770339 0.0032861150 0.0038193941 0.0045068135 0.0050968628 
+#14%          15%          16%          17%          18%          19%          20% 
+#0.0057625770 0.0064450726 0.0070619403 0.0077506372 0.0084121075 0.0092315426 0.0099751586 
+#21%          22%          23%          24%          25%          26%          27% 
+#0.0106541004 0.0112711916 0.0120685994 0.0127173784 0.0135075088 0.0143312766 0.0150355003 
+#28%          29%          30%          31%          32%          33%          34% 
+#0.0158799978 0.0167372048 0.0176059808 0.0185233068 0.0195248606 0.0204254850 0.0214692197 
+#35%          36%          37%          38%          39%          40%          41% 
+#0.0224439391 0.0234598485 0.0244238292 0.0254708053 0.0266262019 0.0276160011 0.0287469488 
+#42%          43%          44%          45%          46%          47%          48% 
+#0.0298861194 0.0310205064 0.0321161499 0.0333969911 0.0345768045 0.0357437480 0.0371298791 
+#49%          50%          51%          52%          53%          54%          55% 
+#0.0384770869 0.0401474057 0.0415473036 0.0432617752 0.0449342440 0.0463982067 0.0483059459 
+#56%          57%          58%          59%          60%          61%          62% 
+#0.0499366806 0.0518468213 0.0536145974 0.0555539510 0.0577581500 0.0600522960 0.0626178229 
+#63%          64%          65%          66%          67%          68%          69% 
+#0.0651294251 0.0676509506 0.0702156375 0.0729339386 0.0747926483 0.0762670234 0.0771041156 
+#70%          71%          72%          73%          74%          75%          76% 
+#0.0788488137 0.0811834499 0.0823218507 0.0856850735 0.0893320264 0.0933992811 0.0973509582 
+#77%          78%          79%          80%          81%          82%          83% 
+#0.1017835789 0.1063918645 0.1112848962 0.1170890394 0.1199754430 0.1248723350 0.1300858324 
+#84%          85%          86%          87%          88%          89%          90% 
+#0.1375843626 0.1459438992 0.1515170419 0.1603820360 0.1671127216 0.1774754296 0.1903621888 
+#91%          92%          93%          94%          95%          96%          97% 
+#0.2012358391 0.2202341660 0.2349696789 0.2543415272 0.2816119638 0.3155595225 0.3633040041 
+#98%          99%         100% 
+#0.4538336891 0.6463677157 7.2731721812 
+CL_co <- rownames(CL[rowVars(CL)<0.3,])
+
+CC <- expr.vst[,63:65]
+head(CC)
+quantile (rowVars(CC),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 3.411685e-05 1.490300e-04 2.837731e-04 4.002286e-04 5.377262e-04 
+#7%           8%           9%          10%          11%          12%          13% 
+#6.634256e-04 8.102873e-04 9.478415e-04 1.108592e-03 1.262938e-03 1.414585e-03 1.587232e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#1.739403e-03 1.911262e-03 2.082786e-03 2.265705e-03 2.454385e-03 2.663918e-03 2.870413e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#3.056853e-03 3.280850e-03 3.506568e-03 3.745814e-03 3.997331e-03 4.255576e-03 4.477415e-03 
+#28%          29%          30%          31%          32%          33%          34% 
+#4.701854e-03 4.960662e-03 5.205497e-03 5.440614e-03 5.712750e-03 6.012328e-03 6.347254e-03 
+#35%          36%          37%          38%          39%          40%          41% 
+#6.647486e-03 6.946366e-03 7.319694e-03 7.614188e-03 7.988949e-03 8.382052e-03 8.781843e-03 
+#42%          43%          44%          45%          46%          47%          48% 
+#9.147335e-03 9.576166e-03 9.962933e-03 1.039250e-02 1.081845e-02 1.128188e-02 1.175196e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#1.224360e-02 1.272119e-02 1.328437e-02 1.379757e-02 1.436731e-02 1.488458e-02 1.553243e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#1.622231e-02 1.684258e-02 1.754247e-02 1.826021e-02 1.901644e-02 1.973254e-02 2.054643e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#2.144841e-02 2.237849e-02 2.332243e-02 2.413317e-02 2.519761e-02 2.636805e-02 2.755712e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#2.859824e-02 2.974677e-02 3.114245e-02 3.257040e-02 3.421557e-02 3.588964e-02 3.768182e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#3.948557e-02 4.159313e-02 4.368101e-02 4.605763e-02 4.796725e-02 5.029456e-02 5.256402e-02 
+#84%          85%          86%          87%          88%          89%          90% 
+#5.520998e-02 5.797714e-02 6.046396e-02 6.429362e-02 6.918599e-02 7.441973e-02 7.895127e-02 
+#91%          92%          93%          94%          95%          96%          97% 
+#8.496245e-02 9.161341e-02 1.011605e-01 1.117280e-01 1.273496e-01 1.450565e-01 1.716825e-01 
+#98%          99%         100% 
+#2.121031e-01 3.083032e-01 3.163694e+00 
+CC_co <- rownames(CC[rowVars(CC)<0.3,])
+
+FL <- expr.vst[,66:68]
+head(FL)
+quantile (rowVars(FL),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 2.879194e-05 5.591238e-04 1.206268e-03 
+#7%           8%           9%          10%          11%          12%          13% 
+#1.943109e-03 2.637309e-03 3.218597e-03 3.852791e-03 4.628998e-03 5.341466e-03 6.042911e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#6.805706e-03 7.470651e-03 8.225066e-03 9.040361e-03 9.812812e-03 1.067742e-02 1.136315e-02 
+#21%          22%          23%          24%          25%          26%          27% 
+#1.215699e-02 1.287790e-02 1.357889e-02 1.427932e-02 1.515040e-02 1.603858e-02 1.691565e-02 
+#28%          29%          30%          31%          32%          33%          34% 
+#1.796271e-02 1.888379e-02 1.983355e-02 2.086318e-02 2.185407e-02 2.283974e-02 2.389617e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#2.512849e-02 2.603758e-02 2.695935e-02 2.792996e-02 2.903417e-02 3.006287e-02 3.107420e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#3.235685e-02 3.363564e-02 3.507797e-02 3.632123e-02 3.760286e-02 3.879942e-02 4.009600e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#4.150199e-02 4.308588e-02 4.466294e-02 4.631279e-02 4.799123e-02 4.984730e-02 5.180383e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#5.355302e-02 5.527507e-02 5.694530e-02 5.904806e-02 6.098790e-02 6.300651e-02 6.567026e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#6.802921e-02 7.030588e-02 7.184461e-02 7.284620e-02 7.352461e-02 7.455730e-02 7.574698e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#7.838911e-02 8.128978e-02 8.442118e-02 8.792071e-02 9.171481e-02 9.529337e-02 9.914341e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#1.032076e-01 1.076767e-01 1.122536e-01 1.150103e-01 1.178394e-01 1.233508e-01 1.295436e-01 
+#84%          85%          86%          87%          88%          89%          90% 
+#1.360202e-01 1.425250e-01 1.469526e-01 1.525174e-01 1.615938e-01 1.692997e-01 1.810489e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.898113e-01 2.070500e-01 2.192232e-01 2.328819e-01 2.573495e-01 2.833751e-01 3.213068e-01 
+#98%          99%         100% 
+#3.838430e-01 5.202141e-01 1.024525e+01 
+FL_co <- rownames(FL[rowVars(FL)<0.3,])
+
+FC <- expr.vst[,69:71]
+head(FC)
+quantile (rowVars(FC),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.0000000000 0.0000000000 0.0001054476 0.0002902963 0.0004715539 0.0006567738 0.0008670061 
+#7%           8%           9%          10%          11%          12%          13% 
+#0.0010510631 0.0012461996 0.0014711822 0.0016784028 0.0018794456 0.0020985435 0.0023393857 
+#14%          15%          16%          17%          18%          19%          20% 
+#0.0025570850 0.0028033915 0.0030212509 0.0032609409 0.0035047232 0.0037487210 0.0039741159 
+#21%          22%          23%          24%          25%          26%          27% 
+#0.0042548434 0.0045002515 0.0047936924 0.0050956076 0.0053874258 0.0056918121 0.0060230231 
+#28%          29%          30%          31%          32%          33%          34% 
+#0.0063444278 0.0066752006 0.0070162361 0.0073973449 0.0078031062 0.0081489114 0.0085076853 
+#35%          36%          37%          38%          39%          40%          41% 
+#0.0088971380 0.0092943089 0.0096556866 0.0101169643 0.0105823741 0.0110187129 0.0115260675 
+#42%          43%          44%          45%          46%          47%          48% 
+#0.0119674181 0.0124965587 0.0130101052 0.0135477079 0.0141094765 0.0146179565 0.0151310402 
+#49%          50%          51%          52%          53%          54%          55% 
+#0.0156600065 0.0163643414 0.0169778290 0.0176932117 0.0183112295 0.0190574080 0.0198453330 
+#56%          57%          58%          59%          60%          61%          62% 
+#0.0206527536 0.0213993693 0.0221739506 0.0230702730 0.0239609194 0.0248099021 0.0258242327 
+#63%          64%          65%          66%          67%          68%          69% 
+#0.0269745638 0.0281561047 0.0294557972 0.0306631086 0.0319848574 0.0331787649 0.0347725018 
+#70%          71%          72%          73%          74%          75%          76% 
+#0.0361634801 0.0379495376 0.0395402253 0.0414601469 0.0431495525 0.0449811964 0.0466243305 
+#77%          78%          79%          80%          81%          82%          83% 
+#0.0483506208 0.0501166852 0.0528283618 0.0549154911 0.0572913752 0.0601347727 0.0629300269 
+#84%          85%          86%          87%          88%          89%          90% 
+#0.0667702460 0.0705138194 0.0743258702 0.0784642108 0.0834315893 0.0897867712 0.0949160713 
+#91%          92%          93%          94%          95%          96%          97% 
+#0.1023371454 0.1104492241 0.1211789507 0.1339670845 0.1469722004 0.1686555764 0.1961083992 
+#98%          99%         100% 
+#0.2421610311 0.3456342275 5.7336923229
+FC_co <- rownames(FC[rowVars(FC)<0.3,])
+
+RL <- expr.vst[,72:74]
+head(RL)
+quantile (rowVars(RL),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.000000e+00 0.000000e+00 0.000000e+00 0.000000e+00 6.242572e-05 5.256335e-04 9.945344e-04 
+#7%           8%           9%          10%          11%          12%          13% 
+#1.337051e-03 1.853865e-03 2.315623e-03 2.697791e-03 3.170872e-03 3.748137e-03 4.286716e-03 
+#14%          15%          16%          17%          18%          19%          20% 
+#4.772586e-03 5.273143e-03 5.730485e-03 6.195419e-03 6.708195e-03 7.225375e-03 7.880872e-03 
+#21%          22%          23%          24%          25%          26%          27% 
+#8.446709e-03 9.043426e-03 9.731179e-03 1.030239e-02 1.089977e-02 1.153784e-02 1.206235e-02 
+#28%          29%          30%          31%          32%          33%          34% 
+#1.279849e-02 1.343468e-02 1.410520e-02 1.485111e-02 1.550955e-02 1.618983e-02 1.712080e-02 
+#35%          36%          37%          38%          39%          40%          41% 
+#1.789492e-02 1.870794e-02 1.950925e-02 2.025611e-02 2.110219e-02 2.207213e-02 2.292013e-02 
+#42%          43%          44%          45%          46%          47%          48% 
+#2.386471e-02 2.474920e-02 2.570972e-02 2.672247e-02 2.789377e-02 2.904812e-02 3.020532e-02 
+#49%          50%          51%          52%          53%          54%          55% 
+#3.142281e-02 3.271723e-02 3.400187e-02 3.510148e-02 3.640491e-02 3.762608e-02 3.913982e-02 
+#56%          57%          58%          59%          60%          61%          62% 
+#4.101178e-02 4.267533e-02 4.418968e-02 4.575990e-02 4.761179e-02 4.929838e-02 5.128321e-02 
+#63%          64%          65%          66%          67%          68%          69% 
+#5.324825e-02 5.529886e-02 5.775463e-02 5.988252e-02 6.242468e-02 6.479699e-02 6.727357e-02 
+#70%          71%          72%          73%          74%          75%          76% 
+#6.763262e-02 7.019439e-02 7.350759e-02 7.589200e-02 7.780446e-02 8.131950e-02 8.362218e-02 
+#77%          78%          79%          80%          81%          82%          83% 
+#8.563893e-02 8.701337e-02 9.111883e-02 9.605495e-02 1.011730e-01 1.071949e-01 1.120319e-01 
+#84%          85%          86%          87%          88%          89%          90% 
+#1.170904e-01 1.234276e-01 1.298557e-01 1.334839e-01 1.418357e-01 1.504123e-01 1.593276e-01 
+#91%          92%          93%          94%          95%          96%          97% 
+#1.706275e-01 1.835060e-01 1.951884e-01 2.121471e-01 2.371845e-01 2.605128e-01 3.041847e-01 
+#98%          99%         100% 
+#3.717343e-01 5.069214e-01 5.649535e+00 
+RL_co <- rownames(RL[rowVars(RL)<0.3,])
+
+RC <- expr.vst[,75:77]
+head(RC)
+quantile (rowVars(RC),probs=seq(0,1,0.01))
+#0%           1%           2%           3%           4%           5%           6% 
+#0.0000000000 0.0000000000 0.0004098014 0.0008532820 0.0013750612 0.0018008913 0.0023840681 
+#7%           8%           9%          10%          11%          12%          13% 
+#0.0029671137 0.0034775423 0.0040893638 0.0047003412 0.0052336971 0.0057928946 0.0063214877 
+#14%          15%          16%          17%          18%          19%          20% 
+#0.0069790254 0.0075882983 0.0082199843 0.0089302668 0.0095332177 0.0103041503 0.0110271657 
+#21%          22%          23%          24%          25%          26%          27% 
+#0.0117777838 0.0124720194 0.0131905905 0.0139070678 0.0148134751 0.0156791861 0.0165154913 
+#28%          29%          30%          31%          32%          33%          34% 
+#0.0174640506 0.0183357297 0.0192860433 0.0201562791 0.0210750722 0.0218990236 0.0228999176 
+#35%          36%          37%          38%          39%          40%          41% 
+#0.0238703593 0.0249162802 0.0258901166 0.0270110579 0.0280112948 0.0289869766 0.0301445630 
+#42%          43%          44%          45%          46%          47%          48% 
+#0.0311123593 0.0321973607 0.0334763473 0.0346414369 0.0357766554 0.0370042746 0.0383311832 
+#49%          50%          51%          52%          53%          54%          55% 
+#0.0397473389 0.0410469295 0.0423706727 0.0440107460 0.0455849635 0.0472951550 0.0489781419 
+#56%          57%          58%          59%          60%          61%          62% 
+#0.0505941710 0.0523757630 0.0536538421 0.0553173849 0.0573762539 0.0588627199 0.0607666498 
+#63%          64%          65%          66%          67%          68%          69% 
+#0.0625530462 0.0640874824 0.0664030822 0.0680373659 0.0703048804 0.0725816254 0.0752648438 
+#70%          71%          72%          73%          74%          75%          76% 
+#0.0779339627 0.0804911295 0.0834748422 0.0862741522 0.0892067605 0.0922628230 0.0952402256 
+#77%          78%          79%          80%          81%          82%          83% 
+#0.0988431240 0.1024166149 0.1058284150 0.1098609497 0.1139766041 0.1184697069 0.1228531216 
+#84%          85%          86%          87%          88%          89%          90% 
+#0.1277631925 0.1333026284 0.1389312030 0.1452806714 0.1521379501 0.1605130668 0.1687616993 
+#91%          92%          93%          94%          95%          96%          97% 
+#0.1790420327 0.1897646388 0.2038780699 0.2184975176 0.2406027428 0.2645465294 0.3029193665 
+#98%          99%         100% 
+#0.3702407749 0.4926065870 3.3385180667 
+RC_co <- rownames(RC[rowVars(RC)<0.3,])
+low_var_gene_shoot <- intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(intersect(shootCK1h,shootCK2h),
+                                                                                                                                                                                                          shootCK5h),
+                                                                                                                                                                                                shootCK10h),
+                                                                                                                                                                                      shootCK24h),
+                                                                                                                                                                            shootsalt1h),
+                                                                                                                                                                  shootsalt2h),
+                                                                                                                                                        shootsalt5h),
+                                                                                                                                              shootsalt10h),
+                                                                                                                                    shootsalt24h),
+                                                                                                                          shootdrought1h),
+                                                                                                                shootdrought2h),
+                                                                                                      shootdrought5h),
+                                                                                            shootdrought10h),
+                                                                                  shootdrought24h),
+                                                                        shootheat1h),
+                                                              shootheat2h),
+                                                    shootheat5h),
+                                          shootheat10h),
+                                shootheat24h)
+
+length(low_var_gene_shoot)
+#16327
+low_var_gene_freeze <- intersect(intersect(intersect(intersect(intersect(CC_co,CL_co),
+                                                               FC_co),
+                                                     FL_co),
+                                           RC_co),
+                                 RL_co)
+length(low_var_gene_freeze)
+#[1] 21732
+#low_var_gene <- union(low_var_gene_shoot,low_var_gene_freeze)
+#length(low_var_gene)
+#22979
+low_var_gene <- intersect(low_var_gene_shoot,low_var_gene_freeze)
+length(low_var_gene)
+#15080
+
+counts <- counts[rownames(counts) %in% low_var_gene,]
+nrow(counts)
+#15080 #so the same as before
+grep("Brasy1G039900", rownames(counts))#check if this CBF got filtered
+#179
+#So we do not need to filter any genes with big varaince:
+
+#creat a group 
+design <- model.matrix(~0 + group,metaData)
+dds <- DESeq2::DESeqDataSetFromMatrix(countData = counts, colData = metaData, design = design)
+head(counts(dds))
+#colSums(counts(dds)) %>% barplot
+ddsTC <- DESeq(dds)
+rld <- vst( ddsTC )
+expr.vst <- assay(rld)
+head(expr.vst)
+#str(expr.vst)
+expr.vst <- as.data.frame(expr.vst)
+#This file is for WGCNA
+write.table(x = expr.vst,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/normalized_VST_final_shoot_abiotic_freeze_tissue_novargen.txt",
+            sep = "\t",
+            eol = "\n",
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+####
+
+#heatmap:
+library("pheatmap")
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/PCA_shoot_abiotic_freeze_tissue_syl_novargen.pdf",width = 15,height = 15)
+par(mar=c(1,1,1,1))
+plotPCA(rld, intgroup="group")
+dev.off()
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sampletree_shoot_abiotic_freeze_tissue_syl_novargen.pdf",width = 15,height = 15)
+pheatmap(rld_cor)
+dev.off()
+
+colData(dds)
+head(rld)
+library( "genefilter" )
+#install.packages("gplots")
+library(gplots)
+topVarGenes <- head( order( rowVars( assay(rld) ), decreasing=TRUE ), 1000 )
+head(topVarGenes)
+#dev.off()
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heatmap_1000_DGE_freeze_syl_novargen.pdf",width = 15,height = 15)
+
+par(mar=c(1,1,1,1))
+#heatmap(assay(rld)[ topVarGenes, ],
+#        labRow = "",
+#        scale = "row")
+palette <- colorRampPalette(c("red","white","blue"))(256)
+
+heatmap.2( assay(rld)[ topVarGenes, ], scale="row", Colv=FALSE, 
+           trace="none", dendrogram='row', 
+           col = palette,
+           lhei = c(0.8,7),
+           ColSideColors = c( cold="#11C5F6", freeze="#1149F6", recovery="gray")[
+             colData(rld)$treatment ] )
+dev.off()
+head(assay(rld))
+reorder_rld <- assay(rld)[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
+                             30,31,32,33,34,35,36,37,38,39,40,41,42,
+                             43,44,45,46,47,48,49,50,51,52,53,54,
+                             55,56,57,58,59,
+                             16,17,18,19,20,21,22,23,24,25,26,27,
+                             28,29,
+                             60,61,62,
+                             66,67,68,
+                             72,73,74,
+                             63,64,65,
+                             69,70,71,
+                             75,76,77)]
+                          
+head(reorder_rld)
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heatmap_1000_DGE_freeze_syl_novargen_reorder.pdf",width = 15,height = 15)
+
+par(mar=c(1,1,1,1))
+palette <- colorRampPalette(c("red","white","blue"))(256)
+heatmap.2( reorder_rld[row.names(assay(rld)) %in% top_gene_list,], scale="row", Colv=FALSE, 
+           trace="none", dendrogram='row',
+           #Rowv=FALSE,
+           #Colv=FALSE,
+           col = palette,
+           lhei = c(0.8,7),
+           ColSideColors = c( leaf ="green", crown="gold")[
+             colData(rld)$tissue ] )
+dev.off()
+
+#shoot abiotic stress:
 ##control versus treatments
 resultsNames(ddsTC)
-res_heat1h <- results(ddsTC, contrast=list("groupheat.1h", "groupCK.1h"))
+res_heat1h <- results(ddsTC, contrast=list("groupshoot.heat.1", "groupshoot.CK.1"))
 head(res_heat1h)
-
+resultsNames(object)
 #plot(res_heat1h$log2FoldChange,-log10(res_heat1h$padj))
 #res_heat1h_lfc <- lfcShrink(ddsTC,coef = 20,res=res_heat1h)
 #head(res_heat1h_lfc)
@@ -335,7 +1406,7 @@ EnhancedVolcano(res_heat1h,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_heat1h_vocano_fc1.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_heat1h_vocano_fc1#.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -346,7 +1417,7 @@ ggsave(
   dpi = 300,
 )
 
-res_heat2h <- results(ddsTC, contrast=list("groupheat.2h", "groupCK.2h"))
+res_heat2h <- results(ddsTC, contrast=list("groupshoot.heat.2", "groupshoot.CK.2"))
 EnhancedVolcano(res_heat2h,
                 lab = "",
                 x = 'log2FoldChange',
@@ -359,7 +1430,7 @@ EnhancedVolcano(res_heat2h,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_heat2h_vocano_fc1.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_heat2h_vocano_fc1#.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -369,8 +1440,7 @@ ggsave(
   units = "cm",
   dpi = 300,
 )
-
-res_heat5h <- results(ddsTC, contrast=list("groupheat.5h", "groupCK.5h"))              
+res_heat5h <- results(ddsTC, contrast=list("groupshoot.heat.5", "groupshoot.CK.5"))              
 EnhancedVolcano(res_heat5h,
                 lab = "",
                 x = 'log2FoldChange',
@@ -383,7 +1453,7 @@ EnhancedVolcano(res_heat5h,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_heat5h_vocano_fc1.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_heat5h_vocano_fc1#.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -394,7 +1464,7 @@ ggsave(
   dpi = 300,
 )
 
-res_heat10h <- results(ddsTC, contrast=list("groupheat.10h", "groupCK.10h"))               
+res_heat10h <- results(ddsTC, contrast=list("groupshoot.heat.10", "groupshoot.CK.10"))               
 EnhancedVolcano(res_heat10h,
                 lab = "",
                 x = 'log2FoldChange',
@@ -407,7 +1477,7 @@ EnhancedVolcano(res_heat10h,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_heat10h_vocano_fc1.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_heat10h_vocano_fc1#.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -417,7 +1487,7 @@ ggsave(
   units = "cm",
   dpi = 300,
 )
-res_heat24h <- results(ddsTC, contrast=list("groupheat.24h", "groupCK.24h"))
+res_heat24h <- results(ddsTC, contrast=list("groupshoot.heat.24", "groupshoot.CK.24"))
 EnhancedVolcano(res_heat24h,
                 lab = "",
                 x = 'log2FoldChange',
@@ -429,7 +1499,7 @@ EnhancedVolcano(res_heat24h,
                 pCutoff = 0.05,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_heat24h_vocano_fc1.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_heat24h_vocano_fc1#.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -439,28 +1509,23 @@ ggsave(
   units = "cm",
   dpi = 300,
 )
-
 #Define the DEG as foldchanges >1 and adjustP-value <0.05
 #heat1h
 res_heat1h <- res_heat1h[!is.na(res_heat1h$padj),]
 sigres_heat1h_up <- res_heat1h[(res_heat1h$padj<0.05 & res_heat1h$log2FoldChange>= 1),]
 nb_heat1h_up <- nrow(sigres_heat1h_up)
-#3160 #113 #358
+#1663
 write.table(x = sigres_heat1h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat1h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat1h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
-
 sigres_heat1h_down <- res_heat1h[(res_heat1h$padj<0.05 & res_heat1h$log2FoldChange<= -1),]
 nb_heat1h_down <- nrow(sigres_heat1h_down)
-#3239 #0 #45 #2803 #actually is 3239
-#xx<-res_heat1h[!is.na(res_heat1h$padj),]
-#sigres_heat1h_down <-xx[(xx$log2FoldChange<=-1 & xx$padj <0.05),]
-  
+#1554
 write.table(x = sigres_heat1h_down,
             file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat1h_down#.txt",
             sep = "\t",
@@ -469,39 +1534,35 @@ write.table(x = sigres_heat1h_down,
             col.names = TRUE,
             row.names = TRUE
 )
-
 sigres_heat1h_DEG <- res_heat1h[(res_heat1h$padj<0.05 & abs(res_heat1h$log2FoldChange) >= 1 ),]
 nb_heat1h_DEG <- nrow(sigres_heat1h_DEG)
-#6399
+#3217
 write.table(x = sigres_heat1h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat1h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat1h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
-
-  
 #heat2h
 res_heat2h <- res_heat2h[!is.na(res_heat2h$padj),]
 sigres_heat2h_up <- res_heat2h[(res_heat2h$padj< 0.05 & res_heat2h$log2FoldChange>= 1),]
 nb_heat2h_up <- nrow(sigres_heat2h_up)
-#2603 #37 #165
+#1264
 write.table(x = sigres_heat2h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat2h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat2h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
-
 sigres_heat2h_down <- res_heat2h[(res_heat2h$padj<0.05 & res_heat2h$log2FoldChange<= -1),]
 nb_heat2h_down <- nrow(sigres_heat2h_down)
-#3077 #1 #62
+#1535
 write.table(x = sigres_heat2h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat2h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat2h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -509,11 +1570,11 @@ write.table(x = sigres_heat2h_down,
             row.names = TRUE
 )
 
-sigres_heat2h_DEG <- res_heat1h[(res_heat2h$padj<0.05 & abs(res_heat2h$log2FoldChange) >= 1 ),]
+sigres_heat2h_DEG <- res_heat2h[(res_heat2h$padj<0.05 & abs(res_heat2h$log2FoldChange) >= 1 ),]
 nb_heat2h_DEG <- nrow(sigres_heat2h_DEG)
-#5680
+#2799
 write.table(x = sigres_heat2h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat2h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat2h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -525,46 +1586,46 @@ write.table(x = sigres_heat2h_DEG,
 res_heat5h <- res_heat5h[!is.na(res_heat5h$padj),]
 sigres_heat5h_up <- res_heat5h[(res_heat5h$padj<0.05 & res_heat5h$log2FoldChange>= 1),]
 nb_heat5h_up <- nrow(sigres_heat5h_up)
-#1865 #19
+#896
 write.table(x = sigres_heat5h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat5h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat5h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
+
 sigres_heat5h_down <- res_heat5h[(res_heat5h$padj<0.05 & res_heat5h$log2FoldChange<= -1),]
 nb_heat5h_down <- nrow(sigres_heat5h_down)
-#1784 #0
+# 861
 write.table(x = sigres_heat5h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat5h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat5h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
+
 sigres_heat5h_DEG <- res_heat5h[(res_heat5h$padj<0.05 & abs(res_heat5h$log2FoldChange) >= 1 ),]
 nb_heat5h_DEG <- nrow(sigres_heat5h_DEG)
-#3649
+#1757
 write.table(x = sigres_heat5h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat5h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat5h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
-
-
 #heat10h
 res_heat10h <- res_heat10h[!is.na(res_heat10h$padj),]
 sigres_heat10h_up <- res_heat10h[(res_heat10h$padj < 0.05 & res_heat10h$log2FoldChange >= 1),]
 nb_heat10h_up <- nrow(sigres_heat10h_up)
-#1932 #10
+#938
 write.table(x = sigres_heat10h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat10h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat10h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -572,11 +1633,11 @@ write.table(x = sigres_heat10h_up,
             row.names = TRUE
 )
 
-sigres_heat10h_down <- res_heat10h[(res_heat10h$padj<0.05 & res_heat10h$log2FoldChange<= -1),]
+sigres_heat10h_down <- res_heat10h[(res_heat10h$padj < 0.05 & res_heat10h$log2FoldChange <= -1),]
 nb_heat10h_down <- nrow(sigres_heat10h_down)
-#1916 #0
+#938
 write.table(x = sigres_heat10h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat10h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat10h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -586,9 +1647,9 @@ write.table(x = sigres_heat10h_down,
 
 sigres_heat10h_DEG <- res_heat10h[(res_heat10h$padj<0.05 & abs(res_heat10h$log2FoldChange) >= 1 ),]
 nb_heat10h_DEG <- nrow(sigres_heat10h_DEG)
-#4225
+#1814
 write.table(x = sigres_heat10h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat10h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat10h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -600,21 +1661,20 @@ write.table(x = sigres_heat10h_DEG,
 res_heat24h <- res_heat24h[!is.na(res_heat24h$padj),]
 sigres_heat24h_up <- res_heat24h[(res_heat24h$padj<0.05 & res_heat24h$log2FoldChange>=1),]
 nb_heat24h_up <- nrow(sigres_heat24h_up)
-#3316 #9
+#1807
 write.table(x = sigres_heat24h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat24h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat24h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
-
 sigres_heat24h_down <- res_heat24h[(res_heat24h$padj<0.05 & res_heat24h$log2FoldChange<= -1),]
 nb_heat24h_down <- nrow(sigres_heat24h_down)
-#2477 #
+#1082
 write.table(x = sigres_heat24h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat24h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat24h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -623,9 +1683,9 @@ write.table(x = sigres_heat24h_down,
 )
 sigres_heat24h_DEG <- res_heat24h[(res_heat24h$padj<0.05 & abs(res_heat24h$log2FoldChange) >= 1 ),]
 nb_heat24h_DEG <- nrow(sigres_heat24h_DEG)
-#5793
+#2889
 write.table(x = sigres_heat24h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat24h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat24h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -634,7 +1694,7 @@ write.table(x = sigres_heat24h_DEG,
 )
 
 ####Drought
-res_drought1h <- results(ddsTC, contrast=list("groupdrought.1h", "groupCK.1h")) 
+res_drought1h <- results(ddsTC, contrast=list("groupshoot.drought.1", "groupshoot.CK.1")) 
 EnhancedVolcano(res_drought1h,
                 lab = "",
                 x = 'log2FoldChange',
@@ -646,7 +1706,7 @@ EnhancedVolcano(res_drought1h,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_drought1h_vocano#.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_drought1h_vocano##.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -656,20 +1716,19 @@ ggsave(
   units = "cm",
   dpi = 300,
 )
-
-res_drought2h <- results(ddsTC, contrast=list("groupdrought.2h", "groupCK.2h")) 
+res_drought2h <- results(ddsTC, contrast=list("groupshoot.drought.2", "groupshoot.CK.2")) 
 EnhancedVolcano(res_drought2h,
                 lab = "",
                 x = 'log2FoldChange',
                 y = 'pvalue',
                 title =  'Drought2H',
                 xlim = c(-25, 25),
-                FCcutoff=5,
-                pCutoff = 10e-50,
+                FCcutoff=1,
+                pCutoff = 0.05,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_drought2h_vocano#.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_drought2h_vocano##.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -679,20 +1738,19 @@ ggsave(
   units = "cm",
   dpi = 300,
 )
-
-res_drought5h <- results(ddsTC, contrast=list("groupdrought.5h", "groupCK.5h"))
+res_drought5h <- results(ddsTC, contrast=list("groupshoot.drought.5", "groupshoot.CK.5"))
 EnhancedVolcano(res_drought5h,
                 lab = "",
                 x = 'log2FoldChange',
                 y = 'pvalue',
                 title =  'Drought5H',
                 xlim = c(-25, 25),
-                FCcutoff=5,
-                pCutoff = 10e-50,
+                FCcutoff=1,
+                pCutoff = 0.05,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_drought5h_vocano#.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_drought5h_vocano##.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -702,20 +1760,19 @@ ggsave(
   units = "cm",
   dpi = 300,
 )
-
-res_drought10h <- results(ddsTC, contrast=list("groupdrought.10h", "groupCK.10h")) 
+res_drought10h <- results(ddsTC, contrast=list("groupshoot.drought.10", "groupshoot.CK.10")) 
 EnhancedVolcano(res_drought10h,
                 lab = "",
                 x = 'log2FoldChange',
                 y = 'pvalue',
                 title =  'Drought10H',
                 xlim = c(-25, 25),
-                FCcutoff=5,
-                pCutoff = 10e-50,
+                FCcutoff=1,
+                pCutoff = 0.05,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_drought10h_vocano#.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_drought10h_vocano##.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -726,19 +1783,19 @@ ggsave(
   dpi = 300,
 )
 
-res_drought24h <- results(ddsTC, contrast=list("groupdrought.24h", "groupCK.24h"))
+res_drought24h <- results(ddsTC, contrast=list("groupshoot.drought.24", "groupshoot.CK.24"))
 EnhancedVolcano(res_drought24h,
                 lab = "",
                 x = 'log2FoldChange',
                 y = 'pvalue',
                 title =  'Drought24H',
                 xlim = c(-25, 25),
-                FCcutoff=5,
-                pCutoff = 10e-50,
+                FCcutoff=1,
+                pCutoff = 0.05,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_drought24h_vocano#.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_drought24h_vocano##.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -749,20 +1806,169 @@ ggsave(
   dpi = 300,
 )
 
+
+
+##cold versus freeze leaf
+colData(ddsTC)
+res_freeze_leaf <- results(ddsTC, contrast=list("groupleaf.freeze", "groupleaf.cold"))
+EnhancedVolcano(res_freeze_leaf,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'freeze_leaf',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/freeze_leaf_syl.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+#recovery vs freeze leaf
+res_recovery_leaf <- results(ddsTC, contrast=list("groupleaf.recovery", "groupleaf.freeze"))
+EnhancedVolcano(res_recovery_leaf,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'recovery_leaf',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/recovery_leaf_syl.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+#recovery versus cold leaf
+res_recoverycold_leaf <- results(ddsTC, contrast=list("groupleaf.recovery", "groupleaf.cold"))
+EnhancedVolcano(res_recoverycold_leaf,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'recovery vs cold leaf',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/recovery_vs_cold_leaf_syl.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+##crown
+##cold versus freeze crown
+colData(ddsTC)
+res_freeze_crown <- results(ddsTC, contrast=list("groupcrown.freeze", "groupcrown.cold"))
+EnhancedVolcano(res_freeze_crown,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'freeze_crown',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/freeze_crown_syl.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+#recovery vs freeze crown
+res_recovery_crown <- results(ddsTC, contrast=list("groupcrown.recovery", "groupcrown.freeze"))
+EnhancedVolcano(res_recovery_crown,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'recovery_crown',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/recovery_crown_syl.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+#recovery versus cold crown
+res_recoverycold_crown <- results(ddsTC, contrast=list("groupcrown.recovery", "groupcrown.cold"))
+EnhancedVolcano(res_recoverycold_crown,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'recovery vs cold crown',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/recovery_cold_crown_syl.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
 #drought
-#heat1h
+#drought1h
 res_drought1h <- res_drought1h[!is.na(res_drought1h$padj),]
 sigres_drought1h_up <- res_drought1h[(res_drought1h$padj<0.05 & res_drought1h$log2FoldChange> 1),]
 nb_drought1h_up <- nrow(sigres_drought1h_up)
-#2395 #0
+#595
 sigres_drought1h_down <- res_drought1h[(res_drought1h$padj<0.05 & res_drought1h$log2FoldChange< -1),]
 nb_drought1h_down <- nrow(sigres_drought1h_down)
-#1361 #0
+#537
 sigres_drought1h_DEG <- res_drought1h[(res_drought1h$padj<0.05 & abs(res_drought1h$log2FoldChange) >= 1 ),]
 nb_drought1h_DEG <- nrow(sigres_drought1h_DEG)
-#4225
+#1132
 write.table(x = sigres_drought1h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought1h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought1h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -770,7 +1976,7 @@ write.table(x = sigres_drought1h_DEG,
             row.names = TRUE
 )
 write.table(x = sigres_drought1h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought1h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought1h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -778,7 +1984,7 @@ write.table(x = sigres_drought1h_up,
             row.names = TRUE
 )
 write.table(x = sigres_drought1h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought1h_down",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought1h_down#",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -789,15 +1995,15 @@ write.table(x = sigres_drought1h_down,
 res_drought2h <- res_drought2h[!is.na(res_drought2h$padj),]
 sigres_drought2h_up <- res_drought2h[(res_drought2h$padj<0.05 & res_drought2h$log2FoldChange> 1),]
 nb_drought2h_up <- nrow(sigres_drought2h_up)
-#3453 #2
+#1094
 sigres_drought2h_down <- res_drought2h[(res_drought2h$padj<0.05 & res_drought2h$log2FoldChange< -1),]
 nb_drought2h_down <- nrow(sigres_drought2h_down)
-#2544 #2
+#1155
 sigres_drought2h_DEG <- res_drought2h[(res_drought2h$padj<0.05 & abs(res_drought2h$log2FoldChange) >= 1 ),]
 nb_drought2h_DEG <- nrow(sigres_drought2h_DEG)
-#4225
+#2249
 write.table(x = sigres_drought2h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought2h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought2h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -805,7 +2011,7 @@ write.table(x = sigres_drought2h_DEG,
             row.names = TRUE
 )
 write.table(x = sigres_drought2h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought2h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought2h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -813,28 +2019,27 @@ write.table(x = sigres_drought2h_up,
             row.names = TRUE
 )
 write.table(x = sigres_drought2h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought2h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought2h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
-
 #heat5h
 res_drought5h <- res_drought5h[!is.na(res_drought5h$padj),]
 
 sigres_drought5h_up <- res_drought5h[(res_drought5h$padj<0.05 & res_drought5h$log2FoldChange> 1),]
 nb_drought5h_up <- nrow(sigres_drought5h_up)
-#5105 #38
+#2423
 sigres_drought5h_down <- res_drought5h[(res_drought5h$padj<0.05 & res_drought5h$log2FoldChange< -1),]
 nb_drought5h_down <- nrow(sigres_drought5h_down)
-#5017 #2
+#2822
 sigres_drought5h_DEG <- res_drought5h[(res_drought5h$padj<0.05 & abs(res_drought5h$log2FoldChange) >= 1 ),]
 nb_drought5h_DEG <- nrow(sigres_drought5h_DEG)
-#4225
+#45245
 write.table(x = sigres_drought5h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought5h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought5h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -842,7 +2047,7 @@ write.table(x = sigres_drought5h_DEG,
             row.names = TRUE
 )
 write.table(x = sigres_drought5h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought5h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought5h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -850,34 +2055,35 @@ write.table(x = sigres_drought5h_up,
             row.names = TRUE
 )
 write.table(x = sigres_drought5h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought5h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought5h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
+
 #heat10h
 res_drought10h <- res_drought10h[!is.na(res_drought10h$padj),]
 sigres_drought10h_up <- res_drought10h[(res_drought10h$padj<0.05 & res_drought10h$log2FoldChange>1),]
 nb_drought10h_up <- nrow(sigres_drought10h_up)
-#5369 #31
+#2616
 sigres_drought10h_down <- res_drought10h[(res_drought10h$padj<0.05 & res_drought10h$log2FoldChange< -1),]
 nb_drought10h_down <- nrow(sigres_drought10h_down)
-#5014 #0
+#2867
 sigres_drought10h_DEG <- res_drought10h[(res_drought10h$padj<0.05 & abs(res_drought10h$log2FoldChange) >= 1 ),]
 nb_drought10h_DEG <- nrow(sigres_drought10h_DEG)
-#10383
+#5483
 write.table(x = sigres_drought10h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought10h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought10h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
-            )
+)
 write.table(x = sigres_drought10h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought10h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought10h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -885,7 +2091,7 @@ write.table(x = sigres_drought10h_up,
             row.names = TRUE
 )
 write.table(x = sigres_drought10h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought10h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought10h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -897,16 +2103,16 @@ res_drought24h <- res_drought24h[!is.na(res_drought24h$padj),]
 
 sigres_drought24h_up <- res_drought24h[(res_drought24h$padj<0.05 & res_drought24h$log2FoldChange>1),]
 nb_drought24h_up <- nrow(sigres_drought24h_up)
-#5853 #71
+#2974
 sigres_drought24h_down <- res_drought24h[(res_drought24h$padj<0.05 & res_drought24h$log2FoldChange< -1),]
 nb_drought24h_down <- nrow(sigres_drought24h_down)
-#5701 #4
+#3077
 sigres_drought24h_DEG <- res_drought24h[(res_drought24h$padj<0.05 & abs(res_drought24h$log2FoldChange) >= 1 ),]
 nb_drought24h_DEG <- nrow(sigres_drought24h_DEG)
-#11554
+#6051
 
 write.table(x = sigres_drought24h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought24h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought24h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -914,7 +2120,7 @@ write.table(x = sigres_drought24h_DEG,
             row.names = TRUE
 )
 write.table(x = sigres_drought24h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought24h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought24h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -922,16 +2128,15 @@ write.table(x = sigres_drought24h_up,
             row.names = TRUE
 )
 write.table(x = sigres_drought24h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought24h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought24h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
-
 ####salt
-res_salt1h <- results(ddsTC, contrast=list("groupsalt.1h", "groupCK.1h"))
+res_salt1h <- results(ddsTC, contrast=list("groupshoot.salt.1", "groupshoot.CK.1"))
 EnhancedVolcano(res_salt1h,
                 lab = "",
                 x = 'log2FoldChange',
@@ -943,7 +2148,7 @@ EnhancedVolcano(res_salt1h,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_salt1h_vocano#.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_salt1h_vocano##.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -954,7 +2159,7 @@ ggsave(
   dpi = 300,
 )
 
-res_salt2h <- results(ddsTC, contrast=list("groupsalt.2h", "groupCK.2h")) 
+res_salt2h <- results(ddsTC, contrast=list("groupshoot.salt.2", "groupshoot.CK.2")) 
 EnhancedVolcano(res_salt2h,
                 lab = "",
                 x = 'log2FoldChange',
@@ -966,7 +2171,7 @@ EnhancedVolcano(res_salt2h,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_salt2h_vocano#.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_salt2h_vocano##.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -977,7 +2182,7 @@ ggsave(
   dpi = 300,
 )
 
-res_salt5h <- results(ddsTC, contrast=list("groupsalt.5h", "groupCK.5h")) 
+res_salt5h <- results(ddsTC, contrast=list("groupshoot.salt.5", "groupshoot.CK.5")) 
 EnhancedVolcano(res_salt5h,
                 lab = "",
                 x = 'log2FoldChange',
@@ -989,7 +2194,7 @@ EnhancedVolcano(res_salt5h,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_salt5h_vocano#.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_salt5h_vocano##.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -999,7 +2204,7 @@ ggsave(
   units = "cm",
   dpi = 300,
 )
-res_salt10h <- results(ddsTC, contrast=list("groupsalt.10h", "groupCK.10h")) 
+res_salt10h <- results(ddsTC, contrast=list("groupshoot.salt.10", "groupshoot.CK.10")) 
 EnhancedVolcano(res_salt10h,
                 lab = "",
                 x = 'log2FoldChange',
@@ -1011,7 +2216,7 @@ EnhancedVolcano(res_salt10h,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_salt10h_vocano#.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_salt10h_vocano##.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -1022,7 +2227,7 @@ ggsave(
   dpi = 300,
 )
 
-res_salt24h <- results(ddsTC, contrast=list("groupsalt.24h", "groupCK.24h")) 
+res_salt24h <- results(ddsTC, contrast=list("groupshoot.salt.24", "groupshoot.CK.24")) 
 EnhancedVolcano(res_salt24h,
                 lab = "",
                 x = 'log2FoldChange',
@@ -1034,7 +2239,7 @@ EnhancedVolcano(res_salt24h,
                 pointSize = 1.5,
                 colAlpha = 0.5)
 ggsave(
-  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_salt24h_vocano#.pdf",
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/res_salt24h_vocano##.pdf",
   plot = last_plot(),
   device = NULL,
   path = NULL,
@@ -1044,22 +2249,21 @@ ggsave(
   units = "cm",
   dpi = 300,
 )
-
-#na.omit(res_heat1h)
-#heat1h
+#salt
+#salt1h
 res_salt1h <- res_salt1h[!is.na(res_salt1h$padj),]
 sigres_salt1h_up <- res_salt1h[(res_salt1h$padj<0.05 & res_salt1h$log2FoldChange>=1),]
 nb_salt1h_up <- nrow(sigres_salt1h_up)
-#1460 #0
+#321
 sigres_salt1h_down <- res_salt1h[(res_salt1h$padj<0.05 & res_salt1h$log2FoldChange <= -1),]
 nb_salt1h_down <- nrow(sigres_salt1h_down)
-#188
+#69
 sigres_salt1h_DEG <- res_salt1h[(res_salt1h$padj<0.05 & abs(res_salt1h$log2FoldChange) >= 1 ),]
 nb_salt1h_DEG <- nrow(sigres_salt1h_DEG)
-#1648
+#390
 
 write.table(x = sigres_salt1h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt1h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt1h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1067,7 +2271,7 @@ write.table(x = sigres_salt1h_DEG,
             row.names = TRUE
 )
 write.table(x = sigres_salt1h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt1h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt1h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1075,27 +2279,28 @@ write.table(x = sigres_salt1h_up,
             row.names = TRUE
 )
 write.table(x = sigres_salt1h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt1h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt1h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
+
 #heat2h
 res_salt2h <- res_salt2h[!is.na(res_salt2h$padj),]
 sigres_salt2h_up <- res_salt2h[(res_salt2h$padj<0.05 & res_salt2h$log2FoldChange>1),]
 nb_salt2h_up <- nrow(sigres_salt2h_up)
-#594
+#62
 sigres_salt2h_down <- res_salt2h[(res_salt2h$padj<0.05 & res_salt2h$log2FoldChange< -1),]
 nb_salt2h_down <- nrow(sigres_salt2h_down)
-#136
+#40
 sigres_salt2h_DEG <- res_salt1h[(res_salt2h$padj<0.05 & abs(res_salt2h$log2FoldChange) >= 1 ),]
 nb_salt2h_DEG <- nrow(sigres_salt2h_DEG)
-#1648
+#123
 
 write.table(x = sigres_salt2h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt2h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt2h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1103,7 +2308,7 @@ write.table(x = sigres_salt2h_DEG,
             row.names = TRUE
 )
 write.table(x = sigres_salt2h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt2h_uptxt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt2h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1111,7 +2316,7 @@ write.table(x = sigres_salt2h_up,
             row.names = TRUE
 )
 write.table(x = sigres_salt2h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt2h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt2h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1123,15 +2328,15 @@ write.table(x = sigres_salt2h_down,
 res_salt5h <- res_salt5h[!is.na(res_salt5h$padj),]
 sigres_salt5h_up <- res_salt5h[(res_salt5h$padj<0.05 & res_salt5h$log2FoldChange> 1),]
 nb_salt5h_up <- nrow(sigres_salt5h_up)
-#301
+#49
 sigres_salt5h_down <- res_salt5h[(res_salt5h$padj<0.05 & res_salt5h$log2FoldChange< -1),]
 nb_salt5h_down <- nrow(sigres_salt5h_down)
-#71
+#23
 sigres_salt5h_DEG <- res_salt5h[(res_salt5h$padj<0.05 & abs(res_salt5h$log2FoldChange) >= 1 ),]
 nb_salt5h_DEG <- nrow(sigres_salt5h_DEG)
-#1648
+#72
 write.table(x = sigres_salt5h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt5h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt5h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1139,7 +2344,7 @@ write.table(x = sigres_salt5h_DEG,
             row.names = TRUE
 )
 write.table(x = sigres_salt5h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt5h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt5h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1147,7 +2352,7 @@ write.table(x = sigres_salt5h_up,
             row.names = TRUE
 )
 write.table(x = sigres_salt5h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt5h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt5h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1160,16 +2365,16 @@ res_salt10h <- res_salt10h[!is.na(res_salt10h$padj),]
 
 sigres_salt10h_up <- res_salt10h[(res_salt10h$padj<0.05 & res_salt10h$log2FoldChange>1),]
 nb_salt10h_up <- nrow(sigres_salt10h_up)
-#491
+#92
 sigres_salt10h_down <- res_salt10h[(res_salt10h$padj<0.05 & res_salt10h$log2FoldChange< -1),]
 nb_salt10h_down <- nrow(sigres_salt10h_down)
-#292
+#87
 sigres_salt10h_DEG <- res_salt10h[(res_salt10h$padj<0.05 & abs(res_salt10h$log2FoldChange) >= 1 ),]
 nb_salt10h_DEG <- nrow(sigres_salt10h_DEG)
-#783
+#179
 
 write.table(x = sigres_salt10h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt10h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt10h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1177,7 +2382,7 @@ write.table(x = sigres_salt10h_DEG,
             row.names = TRUE
 )
 write.table(x = sigres_salt10h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt10h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt10h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1185,29 +2390,28 @@ write.table(x = sigres_salt10h_up,
             row.names = TRUE
 )
 write.table(x = sigres_salt10h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt10h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt10h_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
             col.names = TRUE,
             row.names = TRUE
 )
-
 #heat24h
 res_salt24h <- res_salt24h[!is.na(res_salt24h$padj),]
 
 sigres_salt24h_up <- res_salt24h[(res_salt24h$padj<0.05 & res_salt24h$log2FoldChange>1),]
 nb_salt24h_up <- nrow(sigres_salt24h_up)
-#793
+#181
 sigres_salt24h_down <- res_salt24h[(res_salt24h$padj<0.05 & res_salt24h$log2FoldChange< -1),]
 nb_salt24h_down <- nrow(sigres_salt24h_down)
-#633
+#156
 sigres_salt24h_DEG <- res_salt24h[(res_salt24h$padj<0.05 & abs(res_salt24h$log2FoldChange) >= 1 ),]
 nb_salt24h_DEG <- nrow(sigres_salt24h_DEG)
-#1426
+#337
 
 write.table(x = sigres_salt24h_DEG,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt24h_DEG.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt24h_DEG#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1215,7 +2419,7 @@ write.table(x = sigres_salt24h_DEG,
             row.names = TRUE
 )
 write.table(x = sigres_salt24h_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt24h_up.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt24h_up#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1223,7 +2427,180 @@ write.table(x = sigres_salt24h_up,
             row.names = TRUE
 )
 write.table(x = sigres_salt24h_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt24h_down.txt",
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt24h_down#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+###freeze treatment
+res_freeze_leaf <- results(ddsTC, contrast=list("groupleaf.freeze.NA", "groupleaf.cold.NA"))
+EnhancedVolcano(res_freeze_leaf,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'freeze_leaf',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/freeze_leaf_syl#.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+#recovery vs freeze leaf
+res_recovery_leaf <- results(ddsTC, contrast=list("groupleaf.recovery.NA", "groupleaf.freeze.NA"))
+EnhancedVolcano(res_recovery_leaf,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'recovery_leaf',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/recovery_leaf_syl#.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+#recovery versus cold leaf
+res_recoverycold_leaf <- results(ddsTC, contrast=list("groupleaf.recovery.NA", "groupleaf.cold.NA"))
+EnhancedVolcano(res_recoverycold_leaf,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'recovery vs cold leaf',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/recovery_vs_cold_leaf_syl#.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+
+##crown
+##cold versus freeze crown
+colData(ddsTC)
+res_freeze_crown <- results(ddsTC, contrast=list("groupcrown.freeze.NA", "groupcrown.cold.NA"))
+EnhancedVolcano(res_freeze_crown,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'freeze_crown',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/freeze_crown_syl#.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+#recovery vs freeze crown
+res_recovery_crown <- results(ddsTC, contrast=list("groupcrown.recovery.NA", "groupcrown.freeze.NA"))
+EnhancedVolcano(res_recovery_crown,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'recovery_crown',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/recovery_crown_syl#.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+#recovery versus cold crown
+res_recoverycold_crown <- results(ddsTC, contrast=list("groupcrown.recovery.NA", "groupcrown.cold.NA"))
+EnhancedVolcano(res_recoverycold_crown,
+                lab = "",
+                x = 'log2FoldChange',
+                y = 'pvalue',
+                title =  'recovery vs cold crown',
+                xlim = c(-25, 25),
+                ylim = c(0,320),
+                FCcutoff=1,
+                pCutoff = 0.05,
+                pointSize = 1.5,
+                colAlpha = 0.5)
+ggsave(
+  "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/recovery_cold_crown_syl#.pdf",
+  plot = last_plot(),
+  device = NULL,
+  path = NULL,
+  scale = 1,
+  width = 22,
+  height = 22,
+  units = "cm",
+  dpi = 300,
+)
+
+#Define the DEG as foldchanges >1 and adjustP-value <0.05
+#cold
+res_freeze_leaf <- res_freeze_leaf[!is.na(res_freeze_leaf$padj),]
+sigres_res_freeze_leaf_up <- res_freeze_leaf[(res_freeze_leaf$padj<0.05 & res_freeze_leaf$log2FoldChange>= 1),]
+nb_res_freeze_leaf_up <- nrow(sigres_res_freeze_leaf_up)
+#54
+write.table(x = sigres_res_freeze_leaf_up,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_freeze_leaf_up#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+sigres_res_freeze_leaf_down <- res_freeze_leaf[(res_freeze_leaf$padj<0.05 & res_freeze_leaf$log2FoldChange<= -1),]
+nb_res_freeze_leaf_down <- nrow(sigres_res_freeze_leaf_down)
+#19
+write.table(x = sigres_res_freeze_leaf_down,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_freeze_leaf_down#.txt",
             sep = "\t",
             eol = "\n",
             quote = FALSE,
@@ -1232,11 +2609,418 @@ write.table(x = sigres_salt24h_down,
 )
 
 
+sigres_res_freeze_leaf_DEG <- res_freeze_leaf[(res_freeze_leaf$padj<0.05 & abs(res_freeze_leaf$log2FoldChange) >= 1 ),]
+nb_sigres_res_freeze_leaf_DEG <- nrow(sigres_res_freeze_leaf_DEG)
+#73
+#set the logfoldchanges as 5 and extract those genes
+#sigres_res_freeze_leaf_DEG_strict <- res_freeze_leaf[(res_freeze_leaf$padj<0.05 & abs(res_freeze_leaf$log2FoldChange) >= 2),]
+#head(sigres_res_freeze_leaf_DEG_strict)
+#nrow(sigres_res_freeze_leaf_DEG_strict)
+#475
+write.table(x = sigres_res_freeze_leaf_DEG,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_freeze_leaf_DEG#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+##recovery from freeze
+res_recovery_leaf <- res_recovery_leaf[!is.na(res_recovery_leaf$padj),]
+sigres_res_recovery_leaf_up <- res_recovery_leaf[(res_recovery_leaf$padj<0.05 & res_recovery_leaf$log2FoldChange>= 1),]
+nb_res_recovery_leaf_up <- nrow(sigres_res_recovery_leaf_up)
+#836
+write.table(x = sigres_res_recovery_leaf_up,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recovery_leaf_up#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+sigres_res_recovery_leaf_down <- res_recovery_leaf[(res_recovery_leaf$padj<0.05 & res_recovery_leaf$log2FoldChange <= -1),]
+nb_res_recovery_leaf_down <- nrow(sigres_res_recovery_leaf_down)
+#774
+write.table(x = sigres_res_recovery_leaf_down,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recovery_leaf_down#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+
+sigres_res_recovery_leaf_DEG <- res_recovery_leaf[(res_recovery_leaf$padj<0.05 & abs(res_recovery_leaf$log2FoldChange) >= 1 ),]
+nb_sigres_res_recovery_leaf_DEG <- nrow(sigres_res_recovery_leaf_DEG)
+#1610
+
+#set the logfoldchanges as 5 and extract those genes
+#sigres_res_recovery_leaf_DEG_strict <- res_recovery_leaf[(res_recovery_leaf$padj<0.05 & abs(res_recovery_leaf$log2FoldChange) >= 2),]
+#head(sigres_res_recovery_leaf_DEG_strict)
+#nrow(sigres_res_recovery_leaf_DEG_strict)
+#1775
+write.table(x = sigres_res_recovery_leaf_DEG,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recovery_leaf_DEG#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+#recovery versus the cold
+res_recoverycold_leaf <- res_recoverycold_leaf[!is.na(res_recoverycold_leaf$padj),]
+sigres_res_recoverycold_leaf_up <- res_recoverycold_leaf[(res_recoverycold_leaf$padj<0.05 & res_recoverycold_leaf$log2FoldChange>= 1),]
+nb_res_recoverycold_leaf_up <- nrow(sigres_res_recoverycold_leaf_up)
+#814
+write.table(x = sigres_res_recoverycold_leaf_up,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recoverycold_leaf_up#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+sigres_res_recoverycold_leaf_down <- res_recoverycold_leaf[(res_recoverycold_leaf$padj<0.05 & res_recoverycold_leaf$log2FoldChange<= -1),]
+nb_res_recoverycold_leaf_down <- nrow(sigres_res_recoverycold_leaf_down)
+#819
+write.table(x = sigres_res_recoverycold_leaf_down,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recoverycold_leaf_down#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+
+sigres_res_recoverycold_leaf_DEG <- res_recoverycold_leaf[(res_recoverycold_leaf$padj<0.05 & abs(res_recoverycold_leaf$log2FoldChange) >= 1 ),]
+nb_sigres_res_recoverycold_leaf_DEG <- nrow(sigres_res_recoverycold_leaf_DEG)
+#1633
+#set the logfoldchanges as 5 and extract those genes
+#sigres_res_recoverycold_leaf_DEG_strict <- res_recoverycold_leaf[(res_recoverycold_leaf$padj<0.05 & abs(res_recoverycold_leaf$log2FoldChange) >= 2),]
+#head(sigres_res_recoverycold_leaf_DEG_strict)
+#nrow(sigres_res_recoverycold_leaf_DEG_strict)
+#2068
+write.table(x = sigres_res_recoverycold_leaf_DEG,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recoverycold_leaf_DEG#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+###Crown
+res_freeze_crown <- res_freeze_crown[!is.na(res_freeze_crown$padj),]
+sigres_res_freeze_crown_up <- res_freeze_crown[(res_freeze_crown$padj<0.05 & res_freeze_crown$log2FoldChange>= 1),]
+nb_res_freeze_crown_up <- nrow(sigres_res_freeze_crown_up)
+#238
+write.table(x = sigres_res_freeze_crown_up,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_freeze_crown_up#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+sigres_res_freeze_crown_down <- res_freeze_crown[(res_freeze_crown$padj<0.05 & res_freeze_crown$log2FoldChange<= -1),]
+nb_res_freeze_crown_down <- nrow(sigres_res_freeze_crown_down)
+#229
+write.table(x = sigres_res_freeze_crown_down,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_freeze_crown_down#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+
+sigres_res_freeze_crown_DEG <- res_freeze_crown[(res_freeze_crown$padj<0.05 & abs(res_freeze_crown$log2FoldChange) >= 1 ),]
+nb_sigres_res_freeze_crown_DEG <- nrow(sigres_res_freeze_crown_DEG)
+#467
+#set the logfoldchanges as 5 and extract those genes
+#sigres_res_freeze_crown_DEG_strict <- res_freeze_crown[(res_freeze_crown$padj<0.05 & abs(res_freeze_crown$log2FoldChange) >= 2),]
+#head(sigres_res_freeze_crown_DEG_strict)
+#nrow(sigres_res_freeze_crown_DEG_strict)
+#838
+write.table(x = sigres_res_freeze_crown_DEG,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_freeze_crown_DEG#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+##recovery from freeze
+res_recovery_crown <- res_recovery_crown[!is.na(res_recovery_crown$padj),]
+sigres_res_recovery_crown_up <- res_recovery_crown[(res_recovery_crown$padj<0.05 & res_recovery_crown$log2FoldChange>= 1),]
+nb_res_recovery_crown_up <- nrow(sigres_res_recovery_crown_up)
+#878
+write.table(x = sigres_res_recovery_crown_up,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recovery_crown_up#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+sigres_res_recovery_crown_down <- res_recovery_crown[(res_recovery_crown$padj<0.05 & res_recovery_crown$log2FoldChange <= -1),]
+nb_res_recovery_crown_down <- nrow(sigres_res_recovery_crown_down)
+#618
+write.table(x = sigres_res_recovery_crown_down,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recovery_crown_down#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+
+sigres_res_recovery_crown_DEG <- res_recovery_crown[(res_recovery_crown$padj<0.05 & abs(res_recovery_crown$log2FoldChange) >= 1 ),]
+nb_sigres_res_recovery_crown_DEG <- nrow(sigres_res_recovery_crown_DEG)
+#1496
+
+#set the logfoldchanges as 5 and extract those genes
+#sigres_res_recovery_crown_DEG_strict <- res_recovery_crown[(res_recovery_crown$padj<0.05 & abs(res_recovery_crown$log2FoldChange) >= 2),]
+#head(sigres_res_recovery_crown_DEG_strict)
+#nrow(sigres_res_recovery_crown_DEG_strict)
+#1379
+write.table(x = sigres_res_recovery_crown_DEG,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recovery_crown_DEG#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+#recovery versus the cold
+res_recoverycold_crown <- res_recoverycold_crown[!is.na(res_recoverycold_crown$padj),]
+sigres_res_recoverycold_crown_up <- res_recoverycold_crown[(res_recoverycold_crown$padj<0.05 & res_recoverycold_crown$log2FoldChange>= 1),]
+nb_res_recoverycold_crown_up <- nrow(sigres_res_recoverycold_crown_up)
+#1211
+write.table(x = sigres_res_recoverycold_crown_up,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recoverycold_crown_up#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+sigres_res_recoverycold_crown_down <- res_recoverycold_crown[(res_recoverycold_crown$padj<0.05 & res_recoverycold_crown$log2FoldChange<= -1),]
+nb_res_recoverycold_crown_down <- nrow(sigres_res_recoverycold_crown_down)
+#1326
+write.table(x = sigres_res_recoverycold_crown_down,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recoverycold_crown_down#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+
+sigres_res_recoverycold_crown_DEG <- res_recoverycold_crown[(res_recoverycold_crown$padj<0.05 & abs(res_recoverycold_crown$log2FoldChange) >= 1 ),]
+nb_sigres_res_recoverycold_crown_DEG <- nrow(sigres_res_recoverycold_crown_DEG)
+#2537
+#set the logfoldchanges as 5 and extract those genes
+#sigres_res_recoverycold_crown_DEG_strict <- res_recoverycold_crown[(res_recoverycold_crown$padj<0.05 & abs(res_recoverycold_crown$log2FoldChange) >= 2),]
+#head(sigres_res_recoverycold_crown_DEG_strict)
+#nrow(sigres_res_recoverycold_crown_DEG_strict)
+#2763
+write.table(x = sigres_res_recoverycold_crown_DEG,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_res_recoverycold_crown_DEG#.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+#top gene list:
+top_gene_list_shoot <- union(union(union(union(union(union(union(union(union(union(union(union(union(union(rownames(sigres_heat1h_DEG),rownames(sigres_heat2h_DEG)),rownames(sigres_heat5h_DEG)),rownames(sigres_heat10h_DEG)),rownames(sigres_heat24h_DEG)),
+                                                                                   rownames(sigres_drought1h_DEG)),rownames(sigres_drought2h_DEG)),rownames(sigres_drought5h_DEG)),rownames(sigres_drought10h_DEG)),rownames(sigres_drought24h_DEG)),
+                                                     rownames(sigres_salt1h_DEG)),rownames(sigres_salt2h_DEG)),rownames(sigres_salt5h_DEG)),rownames(sigres_salt10h_DEG)),rownames(sigres_salt24h_DEG))
+
+length(top_gene_list_shoot)
+#10177
+top_gene_list_shoot <- write.table(x = top_gene_list_shoot,
+                                   file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/DEGs_list_shoot.txt",
+                                   sep = "\t",
+                                   eol = "\n",
+                                   quote = FALSE,
+                                   col.names = TRUE,
+                                   row.names = TRUE
+)
+
+top_gene_list_freeze <- union(union(union(union(union(rownames(sigres_res_freeze_leaf_DEG),rownames(sigres_res_recovery_leaf_DEG)),rownames(sigres_res_recoverycold_leaf_DEG)),
+                                          rownames(sigres_res_freeze_crown_DEG)),
+                                    rownames(sigres_res_recovery_crown_DEG)),
+                              rownames(sigres_res_recoverycold_crown_DEG))
+
+length(top_gene_list_freeze)
+#3988
+top_gene_list_shoot <- write.table(x = top_gene_list_freeze,
+                                   file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/DEGs_list_freeze_tissues.txt",
+                                   sep = "\t",
+                                   eol = "\n",
+                                   quote = FALSE,
+                                   col.names = TRUE,
+                                   row.names = TRUE
+)
+
+top_gene_list <- union(top_gene_list_freeze,top_gene_list_shoot)
+length(top_gene_list)
+#10783
+top_gene_list_shoot <- write.table(x = top_gene_list,
+                                   file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/DEGs_list_shoot_abiotic_freeze_tissues.txt",
+                                   sep = "\t",
+                                   eol = "\n",
+                                   quote = FALSE,
+                                   col.names = TRUE,
+                                   row.names = TRUE
+)
+
+head(top_gene_list)
+core_gene <- read.delim("/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/oneOnone_orth.txt",header = F)
+head(core_gene)
+core_DEGs <- intersect(top_gene_list,core_gene$V1)
+length(core_DEGs)
+#4938
+#plot the genes with logfolderchanges >1
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heatmap_10783_DGE_shoot_abiotic_freeze_syl_novargen.pdf",width = 15,height = 15)
+par(mar=c(1,1,1,1))
+
+palette <- colorRampPalette(c("red","white","blue"))(256)
+head(assay(rld))
+reorder_rld <- assay(rld)[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
+                             30,31,32,33,34,35,36,37,38,39,40,41,42,
+                             43,44,45,46,47,48,49,50,51,52,53,54,
+                             55,56,57,58,59,
+                             16,17,18,19,20,21,22,23,24,25,26,27,
+                             28,29,
+                             60,61,62,
+                             66,67,68,
+                             72,73,74,
+                             63,64,65,
+                             69,70,71,
+                             75,76,77)]
+
+head(reorder_rld)
+heatmap.2( reorder_rld[row.names(assay(rld)) %in% top_gene_list,], scale="row", Colv=FALSE, 
+           trace="none", dendrogram='row',
+           #Rowv=FALSE,
+           #Colv=FALSE,
+           col = palette,
+           lhei = c(0.8,7),
+           ColSideColors = c( leaf ="green", crown="gold")[
+             colData(rld)$tissue ] )
+dev.off()
+
+#plot the genes with logfolderchanges >1
+pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heatmap_4938_core_DGE_shoot_abiotic_freeze_syl_novargen.pdf",width = 15,height = 15)
+par(mar=c(1,1,1,1))
+
+palette <- colorRampPalette(c("red","white","blue"))(256)
+head(assay(rld))
+reorder_rld <- assay(rld)[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
+                             30,31,32,33,34,35,36,37,38,39,40,41,42,
+                             43,44,45,46,47,48,49,50,51,52,53,54,
+                             55,56,57,58,59,
+                             16,17,18,19,20,21,22,23,24,25,26,27,
+                             28,29,
+                             60,61,62,
+                             66,67,68,
+                             72,73,74,
+                             63,64,65,
+                             69,70,71,
+                             75,76,77)]
+
+head(reorder_rld)
+heatmap.2( reorder_rld[row.names(assay(rld)) %in% core_DEGs,], scale="row", Colv=FALSE, 
+           trace="none", dendrogram='row',
+           #Rowv=FALSE,
+           #Colv=FALSE,
+           col = palette,
+           lhei = c(0.8,7),
+           ColSideColors = c( leaf ="green", crown="gold")[
+             colData(rld)$tissue ] )
+dev.off()
+
+###check the unique and shared DEGs for different stress
+#1? response for the drought
+sigres_drought_DEGs <- union(union(union(union(rownames(sigres_drought1h_DEG),rownames(sigres_drought2h_DEG)),
+                             rownames(sigres_drought5h_DEG)),rownames(sigres_drought10h_DEG)),rownames(sigres_drought24h_DEG))
+length(sigres_drought_DEGs)
+#8224
+write.table(x = sigres_drought_DEGs,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_drought_DEGs.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+#sigres_heat_DEGs 
+sigres_heat_DEGs <- union(union(union(union(rownames(sigres_heat1h_DEG),rownames(sigres_heat2h_DEG)),
+                                         rownames(sigres_heat5h_DEG)),rownames(sigres_heat10h_DEG)),rownames(sigres_heat24h_DEG))
+length(sigres_heat_DEGs)
+#5916
+write.table(x = sigres_heat_DEGs,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_heat_DEGs.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+#sigres_salt_DEGs 
+sigres_salt_DEGs <- union(union(union(union(rownames(sigres_salt1h_DEG),rownames(sigres_salt2h_DEG)),
+                                      rownames(sigres_salt5h_DEG)),rownames(sigres_salt10h_DEG)),rownames(sigres_salt24h_DEG))
+length(sigres_salt_DEGs)
+#944
+write.table(x = sigres_salt_DEGs,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_salt_DEGs.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+#leaf_freeze
+sigres_freeze_DEGs_leaf  <- rownames(sigres_res_freeze_leaf_DEG)
+
+write.table(x = sigres_freeze_DEGs_leaf,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_freeze_DEGs_leaf.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
+#leaf_freeze
+sigres_freeze_DEGs_crown  <- rownames(sigres_res_freeze_crown_DEG)
+write.table(x = sigres_freeze_DEGs_crown,
+            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/sigres_freeze_DEGs_crown.txt",
+            sep = "\t",
+            eol = "\n",
+            quote = FALSE,
+            col.names = TRUE,
+            row.names = TRUE
+)
+
 ##GGPLOt
 library(ggplot2)
 heat <- data.frame(Categories=rep(c("Up", "Down"), each=5),
-                  Time=rep(c("1h", "2h", "5h","10h","24h"),2),
-                  Number=c(nb_heat1h_up, nb_heat2h_up, nb_heat5h_up, nb_heat10h_up, nb_heat24h_up, nb_heat1h_down, nb_heat2h_down, nb_heat5h_down, nb_heat10h_down, nb_heat24h_down))
+                   Time=rep(c("1h", "2h", "5h","10h","24h"),2),
+                   Number=c(nb_heat1h_up, nb_heat2h_up, nb_heat5h_up, nb_heat10h_up, nb_heat24h_up, nb_heat1h_down, nb_heat2h_down, nb_heat5h_down, nb_heat10h_down, nb_heat24h_down))
 head(heat)
 str(heat)
 heat$Time <- factor(heat$Time, levels = c("1h", "2h", "5h","10h","24h"))
@@ -1245,26 +3029,26 @@ par(mar=c(5,5,5,5))
 
 pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat_DEG_nb_nosalt24hs3_syl_combined.pdf",width = 8,height = 8)
 p <- ggplot(data=heat, aes(x=Time, y=Number, fill=Categories)) +
-  geom_bar(stat="identity", position=position_dodge())+ylim(0,6000)
-  
+  geom_bar(stat="identity", position=position_dodge())+ylim(0,3500)
+
 heatplot <- p + labs(title="Heat", 
-       x="Time (hours)", y = "The number of genes")+
+                     x="Time (hours)", y = "The number of genes")+
   scale_fill_manual(values=c('black','lightgray')) + theme_bw() +theme(
-       panel.border = element_blank(), panel.grid.major = element_blank(),
-       panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"),
-       axis.text.x = element_text(color = "black", size = 20),
-       axis.text.y = element_text(color = "black", size = 20),  
-       axis.title.x = element_text(color = "black", size = 20),
-       axis.title.y = element_text(color = "black", size = 20)
-       )
+    panel.border = element_blank(), panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"),
+    axis.text.x = element_text(color = "black", size = 20),
+    axis.text.y = element_text(color = "black", size = 20),  
+    axis.title.x = element_text(color = "black", size = 20),
+    axis.title.y = element_text(color = "black", size = 20)
+  )
 
 print(heatplot)
 dev.off()
 
 #drought
 drought <- data.frame(Categories=rep(c("Up", "Down"), each=5),
-                   Time=rep(c("1h", "2h", "5h","10h","24h"),2),
-                   Number=c(nb_drought1h_up, nb_drought2h_up, nb_drought5h_up, nb_drought10h_up, nb_drought24h_up, nb_drought1h_down, nb_drought2h_down, nb_drought5h_down, nb_drought10h_down, nb_drought24h_down))
+                      Time=rep(c("1h", "2h", "5h","10h","24h"),2),
+                      Number=c(nb_drought1h_up, nb_drought2h_up, nb_drought5h_up, nb_drought10h_up, nb_drought24h_up, nb_drought1h_down, nb_drought2h_down, nb_drought5h_down, nb_drought10h_down, nb_drought24h_down))
 head(drought)
 str(drought)
 drought$Time <- factor(drought$Time, levels = c("1h", "2h", "5h","10h","24h"))
@@ -1273,10 +3057,10 @@ par(mar=c(5,5,5,5))
 
 pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought_DEG_nb_nosalt_24hs3_syl_combined.pdf",width = 8,height = 8)
 p <- ggplot(data=drought, aes(x=Time, y=Number, fill=Categories)) +
-  geom_bar(stat="identity", position=position_dodge())+ylim(0,6000)
+  geom_bar(stat="identity", position=position_dodge())+ylim(0,3500)
 
 droughtplot <- p + labs(title="Drought", 
-                     x="Time (hours)", y = "The number of genes")+
+                        x="Time (hours)", y = "The number of genes")+
   scale_fill_manual(values=c('black','lightgray')) + theme_bw() +theme(
     panel.border = element_blank(), panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"),
@@ -1291,8 +3075,8 @@ dev.off()
 
 #salt
 salt <- data.frame(Categories=rep(c("Up", "Down"), each=5),
-                      Time=rep(c("1h", "2h", "5h","10h","24h"),2),
-                      Number=c(nb_salt1h_up, nb_salt2h_up, nb_salt5h_up, nb_salt10h_up, nb_salt24h_up, nb_salt1h_down, nb_salt2h_down, nb_salt5h_down, nb_salt10h_down, nb_salt24h_down))
+                   Time=rep(c("1h", "2h", "5h","10h","24h"),2),
+                   Number=c(nb_salt1h_up, nb_salt2h_up, nb_salt5h_up, nb_salt10h_up, nb_salt24h_up, nb_salt1h_down, nb_salt2h_down, nb_salt5h_down, nb_salt10h_down, nb_salt24h_down))
 head(salt)
 str(salt)
 salt$Time <- factor(salt$Time, levels = c("1h", "2h", "5h","10h","24h"))
@@ -1301,10 +3085,10 @@ par(mar=c(5,5,5,5))
 
 pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt_DEG_nb_no_salt_24h_s3_syl_combined.pdf",width = 8,height = 8)
 p <- ggplot(data=salt, aes(x=Time, y=Number, fill=Categories)) +
-  geom_bar(stat="identity", position=position_dodge())+ylim(0,6000)
+  geom_bar(stat="identity", position=position_dodge())+ylim(0,3500)
 
 saltplot <- p + labs(title="Salt", 
-                        x="Time (hours)", y = "The number of genes")+
+                     x="Time (hours)", y = "The number of genes")+
   scale_fill_manual(values=c('black','lightgray')) + theme_bw() +theme(
     panel.border = element_blank(), panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"),
@@ -1316,247 +3100,6 @@ saltplot <- p + labs(title="Salt",
 
 print(saltplot)
 dev.off()
-##Take the union of the genes with up or downregulating 
-#Take the union of the upregulating genes under heat tretment:
-#upregulating:
-heat1_2_up <- union(rownames(sigres_heat1h_up),rownames(sigres_heat2h_up))
-heat1_5_up <- union(heat1_2_up,rownames(sigres_heat5h_up))
-heat1_10_up <- union(heat1_5_up,rownames(sigres_heat10h_up))
-heat1_24_up <- union(heat1_10_up,rownames(sigres_heat24h_up))
-length(heat1_24_up)
-#5987
-#downregulating:
-heat1_2_down <- union(rownames(sigres_heat1h_down),rownames(sigres_heat2h_down))
-heat1_5_down <- union(heat1_2_down,rownames(sigres_heat5h_down))
-heat1_10_down <- union(heat1_5_down,rownames(sigres_heat10h_down))
-heat1_24_down <- union(heat1_10_down,rownames(sigres_heat24h_down))
-length(heat1_24_down)
-#5603
-####Drought:
-#Take the union of the upregulating genes under drought tretment:
-#upregulating:
-drought1_2_up <- union(rownames(sigres_drought1h_up),rownames(sigres_drought2h_up))
-drought1_5_up <- union(drought1_2_up,rownames(sigres_drought5h_up))
-drought1_10_up <- union(drought1_5_up,rownames(sigres_drought10h_up))
-drought1_24_up <- union(drought1_10_up,rownames(sigres_drought24h_up))
-length(drought1_24_up)
-#7384
-#downregulating:
-drought1_2_down <- union(rownames(sigres_drought1h_down),rownames(sigres_drought2h_down))
-drought1_5_down <- union(drought1_2_down,rownames(sigres_drought5h_down))
-drought1_10_down <- union(drought1_5_down,rownames(sigres_drought10h_down))
-drought1_24_down <- union(drought1_10_down,rownames(sigres_drought24h_down))
-length(drought1_24_down)
-#7671
 
-#Salt:
-#Take the union of the upregulating genes under salt tretment:
-#upregulating:
-salt1_2_up <- union(rownames(sigres_salt1h_up),rownames(sigres_salt2h_up))
-salt1_5_up <- union(salt1_2_up,rownames(sigres_salt5h_up))
-salt1_10_up <- union(salt1_5_up,rownames(sigres_salt10h_up))
-salt1_24_up <- union(salt1_10_up,rownames(sigres_salt24h_up))
-length(salt1_24_up)
-# 2547
-#downregulating:
-salt1_2_down <- union(rownames(sigres_salt1h_down),rownames(sigres_salt2h_down))
-salt1_5_down <- union(salt1_2_down,rownames(sigres_salt5h_down))
-salt1_10_down <- union(salt1_5_down,rownames(sigres_salt10h_down))
-salt1_24_down <- union(salt1_10_down,rownames(sigres_salt24h_down))
-length(salt1_24_down)
-#1008
 
-write.table(x = salt1_24_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt1_24_up#.txt",
-            sep = "\t",
-            eol = "\n",
-            quote = FALSE,
-            col.names = TRUE,
-            row.names = TRUE
-)
-write.table(x = drought1_24_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought1_24_up#.txt",
-            sep = "\t",
-            eol = "\n",
-            quote = FALSE,
-            col.names = TRUE,
-            row.names = TRUE
-)
-write.table(x = heat1_24_up,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat1_24_up#.txt",
-            sep = "\t",
-            eol = "\n",
-            quote = FALSE,
-            col.names = TRUE,
-            row.names = TRUE
-)
-
-write.table(x = heat1_24_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heat1_24_down#.txt",
-            sep = "\t",
-            eol = "\n",
-            quote = FALSE,
-            col.names = TRUE,
-            row.names = TRUE
-)
-write.table(x = drought1_24_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/drought1_24_down#.txt",
-            sep = "\t",
-            eol = "\n",
-            quote = FALSE,
-            col.names = TRUE,
-            row.names = TRUE
-)
-write.table(x = salt1_24_down,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/salt1_24_down#.txt",
-            sep = "\t",
-            eol = "\n",
-            quote = FALSE,
-            col.names = TRUE,
-            row.names = TRUE
-)
-#Venn diagram:
-#install.packages("VennDiagram")
-library(VennDiagram)
-library(RColorBrewer)
-#myCol <- brewer.pal(3, "Purples")
-myCol <- c("#ff8000","#ffff00","#0066ff")
-#pdf(file = "/global/u2/l/llei2019/Brachypodium/Sylvaticum/RNAseq/Venn_up_no_salt_24h_s3.pdf",width = 8,height = 8)
-#up
-setwd("/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/")
-#dev.off()
-venn.diagram(
-  x = list(drought1_24_up,heat1_24_up,  salt1_24_up),
-  category.names = c( "Drought " , "Heat" ,"Salt"),
-  filename = 'up-DGE-abiotic_syl#.png',
-  output=TRUE,
-  
-  # Output features
-  imagetype="png" ,
-  height = 480 , 
-  width = 480 , 
-  resolution = 400,
-  compression = "lzw",
-  
-  # Circles
-  lwd = 2,
-  lty = 'blank',
-  fill = myCol,
-  
-  # Numbers
-  cex = .6,
-  fontface = "bold",
-  fontfamily = "sans",
-  
-  # Set names
-  cat.cex = 0.6,
-  cat.fontface = "bold",
-  cat.default.pos = "outer",
-  cat.pos = c(-27, 27, 135),
-  cat.dist = c(0.055, 0.055, 0.085),
-  cat.fontfamily = "sans",
-  rotation = 1
-)
-#down:
-#up
-venn.diagram(
-  x = list( drought1_24_down, heat1_24_down,salt1_24_down),
-  category.names = c("Drought " , "Heat" , "Salt"),
-  filename = 'down-DGE-abiotic_syl#.png',
-  output=TRUE,
-  
-  # Output features
-  imagetype="png" ,
-  height = 480 , 
-  width = 480 , 
-  resolution = 400,
-  compression = "lzw",
-  
-  # Circles
-  lwd = 2,
-  lty = 'blank',
-  fill = myCol,
-  
-  # Numbers
-  cex = .6,
-  fontface = "bold",
-  fontfamily = "sans",
-  
-  # Set names
-  cat.cex = 0.6,
-  cat.fontface = "bold",
-  cat.default.pos = "outer",
-  cat.pos = c(-27, 27, 135),
-  cat.dist = c(0.055, 0.055, 0.085),
-  cat.fontfamily = "sans",
-  rotation = 1
-)
-
-salt_DEG_gene_list <- union(union(union(union(rownames(sigres_salt1h_DEG),rownames(sigres_salt2h_DEG)),rownames(sigres_salt5h_DEG)),rownames(sigres_salt10h_DEG)),rownames(sigres_salt24h_DEG))
-length(salt_DEG_gene_list)
-#3512
-drought_DEG_gene_list <- union(union(union(union(rownames(sigres_drought1h_DEG),rownames(sigres_drought2h_DEG)),rownames(sigres_drought5h_DEG)),rownames(sigres_drought10h_DEG)),rownames(sigres_drought24h_DEG))
-length(drought_DEG_gene_list)
-#14694
-
-heat_DEG_gene_list <- union(union(union(union(rownames(sigres_heat1h_DEG),rownames(sigres_heat2h_DEG)),rownames(sigres_heat5h_DEG)),rownames(sigres_heat10h_DEG)),rownames(sigres_heat24h_DEG))
-length(heat_DEG_gene_list)
-#11217
-top_gene_list <- union(union(salt_DEG_gene_list,drought_DEG_gene_list),heat_DEG_gene_list)
-length(top_gene_list)
-#17184
-write.table(x = top_gene_list,
-            file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/all_sig_DEGs_across_stresses_time_gene.list.txt",
-            sep = "\t",
-            eol = "\n",
-            quote = FALSE,
-            col.names = TRUE,
-            row.names = TRUE
-)
-
-#plot the genes with logfolderchanges >1
-pdf(file = "/global/projectb/scratch/llei2019/RNAseq_Syl_sgordon/heatmap_17184_DGE_shoot_abiotic.pdf",width = 15,height = 15)
-par(mar=c(1,1,1,1))
-head(assay(rld))
-palette <- colorRampPalette(c("red","white","blue"))(256)
-head(assay(rld))
-reorder_rld <- assay(rld)[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,16,17,18,19,20,21,22,23,24,25,26,27,28,29)]
-head(reorder_rld)
-heatmap.2( reorder_rld[row.names(assay(rld)) %in% top_gene_list,], scale="row", Colv=FALSE, 
-           trace="none", dendrogram='none', 
-           col = palette,
-           lhei = c(0.8,7),
-           ColSideColors = c( CK="gray", drought="#ffff00",heat="#ff8000", salt="#0066ff")[
-             colData(rld)$treatment ] )
-dev.off()
-
-#up-regulating
-3286+1925+2785+1132+1041+145+229
-#10543
-
-#Down regulating
-4250+2647+2220+580+194+156+78
-#10125
-
-#drought-up
-3286+1925+1132+1041
-#7384
-
-#Heat-up
-1925+2785+1132+145
-#6987
-#salt
-1041+1132+145+229
-#2547
-
-##drought-down
-4250+2647+580+194
-#7671
-
-#heat_down
-2647+2220+580
-#5447
-
-#salt -down
-194+580+56+78
-#908
+           
