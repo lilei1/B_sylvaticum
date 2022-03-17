@@ -12,17 +12,31 @@ while (<IN>) {
 		$line = $_;
 		chomp $line;
 			#close OUTFILE;
+            #print "$line\n";
 			#my $seq_name = substr($line,1);
 			my @array = split(/\|/, $line);
-            #print "$array[1]\t$array[2]\n";
+            #print "$array[1]\t$array[2]\n";            
             $array[1] =~ s/^\s+//;
             $array[1] =~ s/\s+$//;
+            $array[2] =~ s/^\s+cellular\s+organisms\;//;
             $array[2] =~ s/^\s+//;
             $array[2] =~ s/\s+$//;
+            $array[2] =~ s/\;$//;
+            #print "$array[1]\t$array[2]\n";
+            @yy = split(/\;\s+/, $array[2]);#split the lineage with ;
+             #print "$yy[-1]\n";
+            if ($yy[-1] =~ /^unclassified.+/){
+                #print "$yy[-1]\n";
+                #print "$yy[0]\n";
+                pop @yy;
+                #print "$yy[0]\n";
+                $array[2] = join('; ', map { "$_" } @yy);
+                #print "$array[2]\n";
+            }
             my $key = $array[1];
             my $value = $array[2];
             if ($key ne "" and $value ne ""){
-               $hash{$key} = $value;   
+                $hash{$key} = $value;   
             }
 }
 close IN;
@@ -41,11 +55,14 @@ while (<INFILE>) {
                $matches[0]=~ s/^\s+//;
                $matches[0]=~ s/\s+$//;
             my $tax = $matches[0];
-            if (exists $hash{$tax}){
-            my $new_head = $gid." | "."[".$tax."]"." | "."[".$hash{$tax}."]";
-            $line = ">".$new_head
+            if ($tax ne "" and exists $hash{$tax}){#if no [], we need to skip
+                my $new_head = $gid." | "."[".$tax."]"." | "."[".$hash{$tax}."]";
+                $line = ">".$new_head
             #print "$line\n";
             #print "$seq_name\n";
+            }
+            else{
+                next; #skipe 
             }
         }
         print "$line\n";

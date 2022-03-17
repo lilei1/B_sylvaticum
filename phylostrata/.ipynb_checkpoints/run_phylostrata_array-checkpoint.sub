@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH --qos=genepool
+#SBATCH --time=10:00:00
+#SBATCH --nodes=1
+#SBATCH --account=plant
+#SBATCH --job-name=run_phylostrata
+#SBATCH --output=run_phylostrata-%l.out
+#SBATCH --error=run_phylostrata-%l.err
+
+
+FASTAFILES=($(cat /global/cscratch1/sd/llei2019/B_syl_pro/query_fasta/query_list))
+CURRENT_FASTAFILES=${FASTAFILES[${SLURM_ARRAY_TASK_ID}]}
+NUMS=($(awk -F"/" '{print $NF}' /global/cscratch1/sd/llei2019/B_syl_pro/query_fasta/query_list|awk -F "." '{print $4}'))
+CURRENT_NUM=${NUMS[${SLURM_ARRAY_TASK_ID}]}
+
+perl /global/projectb/scratch/llei2019/software/Phylostratigraphy/createPSmap.pl --organism ${CURRENT_FASTAFILES} --database /global/cscratch1/sd/llei2019/ncbi_NR_databases/rehead_nr_20201202.fa  --prefix BS_BlastAll_PS_map_${CURRENT_NUMS} --seqOffset 50  --evalue 1e-5 --threads 60 --blastPlus
